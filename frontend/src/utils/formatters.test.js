@@ -454,6 +454,15 @@ describe("mostRecentAt", () => {
     expect(hoursAgo).toBeCloseTo(1, 1);
   });
 
+  it("falls back to a past start when an end time is in the future", () => {
+    const start = at(0.5);
+    const futureEnd = new Date(Date.now() + 30 * 60000).toISOString();
+
+    expect(mostRecentAt([{ start, end: futureEnd }])).toBe(
+      new Date(start).getTime(),
+    );
+  });
+
   // The case that prompted all this.
   it("still finds last night's feed just after midnight", () => {
     const now = new Date();

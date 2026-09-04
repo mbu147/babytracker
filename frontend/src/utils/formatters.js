@@ -117,8 +117,16 @@ export function lastSeenLabel(dateStr, t = englishT) {
 // start and the newest start isn't always the newest end.
 export function mostRecentAt(entries = []) {
   let newest = null;
+  const now = Date.now();
   for (const entry of entries) {
-    const at = new Date(agoAnchor(entry)).getTime();
+    let at = new Date(agoAnchor(entry)).getTime();
+    // An end time can be shifted into the future by older/imported data. Do
+    // not turn that into "just now"; use the start time when it is already
+    // in the past, which is the reliable time the activity began.
+    if (Number.isFinite(at) && at > now) {
+      const start = new Date(entry.start || entry.time).getTime();
+      at = Number.isFinite(start) && start <= now ? start : NaN;
+    }
     if (Number.isFinite(at) && (newest === null || at > newest)) newest = at;
   }
   return newest;

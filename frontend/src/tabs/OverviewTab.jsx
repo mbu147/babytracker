@@ -77,7 +77,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         tummyTimes.length
       : 0;
 
-  // "Last: 5m ago" for each stat card.
+  // Relative "last seen" labels for each stat card.
   //
   // Read from the seven-day sets, not the today-only ones the numbers above
   // come from. That is the whole point: at 00:30 today's feeding count is 0
