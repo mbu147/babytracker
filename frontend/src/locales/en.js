@@ -45,6 +45,7 @@ export default {
   "timer.feeding": "Feeding",
   "timer.sleep": "Sleep",
   "timer.tummy": "Tummy Time",
+  "timer.actualDuration": "Actual Duration",
   "timer.pauses": "Pauses",
 
   // Overview
@@ -53,7 +54,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} feedings today",
   "overview.sleep": "Sleep",
   "overview.sleepLast24": "Last 24 hours",
-  "overview.diaperBreakdown": "{{wet}} wet · {{solid}} solid ({{both}} both)",
+  "overview.diaperBreakdown": "{{wet}} wet · {{solid}} solid · {{both}} both",
   "overview.sessionsToday_one": "{{count}} session today",
   "overview.sessionsToday_other": "{{count}} sessions today",
   "overview.lastEntry": "Last: {{value}} ago",

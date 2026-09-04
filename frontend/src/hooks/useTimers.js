@@ -1,37 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../api";
 
-// Whole seconds spent in completed pauses (both start and end set).
-function completedPauseSeconds(pauses) {
-  let total = 0;
-  for (const p of pauses || []) {
-    if (p.start && p.end) {
-      total += Math.floor((new Date(p.end).getTime() - new Date(p.start).getTime()) / 1000);
-    }
-  }
-  return total;
-}
-
-// Frozen elapsed for a paused timer: start → the open (last) pause's start,
-// minus every completed pause before it. Constant while the timer is paused.
-function frozenElapsed(t) {
-  const pauses = t.pauses || [];
-  const last = pauses[pauses.length - 1];
-  if (!last?.start) return 0;
-  const untilPause = Math.floor((new Date(last.start).getTime() - t.start.getTime()) / 1000);
-  return Math.max(0, untilPause - completedPauseSeconds(pauses));
-}
-
-function fromServerTimer(t) {
-  return {
-    id: t.id,
-    name: t.name || "timer",
-    start: new Date(t.start),
-    childId: t.child,
-    pauses: t.pauses || [],
-  };
-}
-
 export function useTimers(serverTimers, childId) {
   const [activeTimers, setActiveTimers] = useState([]);
   const [pausedTimers, setPausedTimers] = useState([]);
@@ -79,31 +48,78 @@ export function useTimers(serverTimers, childId) {
         : serverTimers
       ).filter((t) => !suppressedRef.current.has(t.id));
       
-      setActiveTimers(filtered.filter((t) => !t.is_paused).map(fromServerTimer));
-      setPausedTimers(filtered.filter((t) => t.is_paused).map(fromServerTimer));
+      const active = filtered.filter((t) => !t.isPaused);
+      const paused = filtered.filter((t) => t.isPaused);
+      
+      setActiveTimers(
+        active.map((t) => ({
+          id: t.id,
+          name: t.name || "timer",
+          start: new Date(t.start),
+          childId: t.child,
+          pauses: t.pauses || [],
+        }))
+      );
+      setPausedTimers(
+        paused.map((t) => ({
+          id: t.id,
+          name: t.name || "timer",
+          start: new Date(t.start),
+          childId: t.child,
+          pausedElapsed: t.pausedElapsed || 0,
+          pauses: t.pauses || [],
+        }))
+      );
     } else {
       setActiveTimers([]);
       setPausedTimers([]);
     }
   }, [serverTimers, childId]);
 
-  // Tick elapsed time for active timers. Paused timers are frozen, so their
-  // value is computed once here and the interval only runs while something
-  // is actually counting.
+  // Tick elapsed time for all active timers (paused timers show frozen elapsed time from server)
   useEffect(() => {
-    const frozen = {};
-    for (const t of pausedTimers) frozen[t.id] = frozenElapsed(t);
-    if (activeTimers.length === 0) {
-      setElapsedMap(frozen);
+    if (activeTimers.length === 0 && pausedTimers.length === 0) {
+      setElapsedMap({});
       clearInterval(tickRef.current);
       return;
     }
-    const pauseTotals = activeTimers.map((t) => [t, completedPauseSeconds(t.pauses)]);
     const tick = () => {
       const now = Date.now();
-      const map = { ...frozen };
-      for (const [t, pauseTotal] of pauseTotals) {
-        map[t.id] = Math.max(0, Math.floor((now - t.start.getTime()) / 1000) - pauseTotal);
+      const map = {};
+      // Active timers: calculate elapsed from start time, minus pause durations
+      for (const t of activeTimers) {
+        let elapsed = Math.floor((now - t.start.getTime()) / 1000);
+        // Subtract pause durations
+        if (t.pauses && t.pauses.length > 0) {
+          for (const pause of t.pauses) {
+            if (pause.start && pause.end) {
+              const pauseDuration = Math.floor((new Date(pause.end).getTime() - new Date(pause.start).getTime()) / 1000);
+              elapsed -= pauseDuration;
+            }
+          }
+        }
+        map[t.id] = Math.max(0, elapsed);
+      }
+      // Paused timers: frozen elapsed time — calculate from start to when the pause began
+      for (const t of pausedTimers) {
+        let elapsed = 0;
+        if (t.pauses && t.pauses.length > 0) {
+          // Find when the current pause started (last pause entry)
+          const lastPause = t.pauses[t.pauses.length - 1];
+          if (lastPause.start) {
+            // Elapsed = time from start to pause start, minus all completed pause durations
+            elapsed = Math.floor((new Date(lastPause.start).getTime() - t.start.getTime()) / 1000);
+            // Subtract durations of all *completed* pauses (those with end time)
+            for (let i = 0; i < t.pauses.length - 1; i++) {
+              const pause = t.pauses[i];
+              if (pause.start && pause.end) {
+                const pauseDuration = Math.floor((new Date(pause.end).getTime() - new Date(pause.start).getTime()) / 1000);
+                elapsed -= pauseDuration;
+              }
+            }
+          }
+        }
+        map[t.id] = Math.max(0, elapsed);
       }
       setElapsedMap(map);
     };
@@ -198,38 +214,40 @@ export function useTimers(serverTimers, childId) {
       const activeTimer = activeTimers.find((t) => t.id === timerId);
       if (!activeTimer) return Promise.reject(new Error("Timer not found"));
       
-      // Optimistic update: remove from active, add to paused with the open
-      // pause already appended so the frozen elapsed is right immediately.
-      const optimistic = {
-        ...activeTimer,
-        pauses: [...(activeTimer.pauses || []), { start: new Date().toISOString(), end: null }],
-      };
-      setActiveTimers((prev) => prev.filter((t) => t.id !== timerId));
-      setPausedTimers((prev) =>
-        prev.some((t) => t.id === timerId) ? prev : [...prev, optimistic]
+      // Optimistic update: remove from active, add to paused
+      setActiveTimers((prev) =>
+        prev.filter((t) => t.id !== timerId)
       );
+      setPausedTimers((prev) => [
+        ...prev,
+        {
+          ...activeTimer,
+          pausedElapsed: 0,
+        },
+      ]);
 
-      // A poll can land mid-request and rebuild both lists from a snapshot
-      // taken before (or after) the server committed, so every update below
-      // reconciles by id across both lists instead of assuming its own
-      // optimistic state is still there.
+      // Try to pause on server
       return api
         .pauseTimer(timerId)
         .then((paused) => {
-          const entry = { ...optimistic, pauses: paused.pauses || [] };
-          setActiveTimers((prev) => prev.filter((t) => t.id !== timerId));
+          // Update with server response (includes pauses array)
           setPausedTimers((prev) =>
-            prev.some((t) => t.id === timerId)
-              ? prev.map((t) => (t.id === timerId ? { ...t, pauses: entry.pauses } : t))
-              : [...prev, entry]
+            prev.map((t) =>
+              t.id === timerId
+                ? {
+                    ...t,
+                    pauses: paused.pauses || [],
+                  }
+                : t
+            )
           );
         })
         .catch((err) => {
           // Rollback on error
           console.error("Failed to pause timer:", err);
-          setPausedTimers((prev) => prev.filter((t) => t.id !== timerId));
-          setActiveTimers((prev) =>
-            prev.some((t) => t.id === timerId) ? prev : [...prev, activeTimer]
+          setActiveTimers((prev) => [...prev, activeTimer]);
+          setPausedTimers((prev) =>
+            prev.filter((t) => t.id !== timerId)
           );
           throw err;
         });
@@ -242,14 +260,20 @@ export function useTimers(serverTimers, childId) {
       return api
         .resumeTimer(timerId)
         .then((resumed) => {
-          // Remove from paused timers and add to active (by id — see pauseTimer)
-          const entry = fromServerTimer(resumed);
-          setPausedTimers((prev) => prev.filter((t) => t.id !== timerId));
-          setActiveTimers((prev) =>
-            prev.some((t) => t.id === timerId)
-              ? prev.map((t) => (t.id === timerId ? entry : t))
-              : [...prev, entry]
+          // Remove from paused timers and add to active
+          setPausedTimers((prev) =>
+            prev.filter((t) => t.id !== timerId)
           );
+          setActiveTimers((prev) => [
+            ...prev,
+            {
+              id: resumed.id,
+              name: resumed.name,
+              start: new Date(resumed.start),
+              childId: resumed.child,
+              pauses: resumed.pauses || [],
+            },
+          ]);
         })
         .catch((err) => {
           console.error("Failed to resume timer:", err);
@@ -285,15 +309,10 @@ export function useTimers(serverTimers, childId) {
     
     // Original logic for active timers
     const s = (serverTimers || []).find((t) => t.id === timerId);
-    const restored = s ? fromServerTimer(s) : stashed?.timer || stashed;
+    const restored = s
+      ? { id: s.id, name: s.name || "timer", start: new Date(s.start), childId: s.child }
+      : stashed?.timer || stashed;
     if (!restored || (childId && restored.childId !== childId)) return;
-    if (s?.is_paused) {
-      // Paused on another device while the form was open.
-      setPausedTimers((prev) =>
-        prev.some((p) => p.id === timerId) ? prev : [...prev, restored]
-      );
-      return;
-    }
     setActiveTimers((prev) =>
       prev.some((p) => p.id === timerId) ? prev : [...prev, restored]
     );
