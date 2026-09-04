@@ -43,6 +43,7 @@ export default {
   "timer.feeding": "Pasto",
   "timer.sleep": "Sonno",
   "timer.tummy": "Tempo a pancia in giù",
+  "timer.actualDuration": "Durata effettiva",
   "timer.pauses": "Pause",
 
   // Overview
@@ -51,7 +52,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} pasti oggi",
   "overview.sleep": "Sonno",
   "overview.sleepLast24": "Ultime 24 ore",
-  "overview.diaperBreakdown": "{{wet}} bagnati · {{solid}} solidi ({{both}} entrambi)",
+  "overview.diaperBreakdown": "{{wet}} bagnati · {{solid}} solidi · {{both}} entrambi",
   "overview.sessionsToday_one": "{{count}} sessione oggi",
   "overview.sessionsToday_other": "{{count}} sessioni oggi",
   "overview.lastEntry": "{{value}} fa",

@@ -366,6 +366,7 @@ export const api = {
 
   // Timers
   getTimers: () => request("timers/"),
+  getTimer: (id) => request(`timers/${id}/`),
   createTimer: (data) =>
     request("timers/", { method: "POST", body: JSON.stringify(data) }),
   updateTimer: (id, data) =>
@@ -460,17 +461,12 @@ export const api = {
         signal,
       });
       if (!resp.ok) {
-        // Prefer the server's {error} body; fall back to the HTTP status
-        // (statusText is empty over HTTP/2). The caller adds the
-        // "Export failed:" prefix, so don't repeat it here.
-        let message = resp.statusText || `HTTP ${resp.status}`;
         try {
-          const body = await resp.json();
-          if (body?.error) message = body.error;
+          const error = await resp.json();
+          throw new Error(error.message || "Export failed");
         } catch {
-          // not a JSON body
+          throw new Error(`Export failed: ${resp.statusText}`);
         }
-        throw new Error(message);
       }
       const blob = await resp.blob();
       const filename = resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "babytracker-export.csv";

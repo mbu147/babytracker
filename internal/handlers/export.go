@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/csv"
 	"fmt"
 	"log/slog"
@@ -66,58 +65,94 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := fmt.Sprintf("babytracker_%s_%s.csv", child.FirstName, time.Now().Format("2006-01-02"))
-
-	// Build the whole file in memory before touching the response: once a
-	// header or a flushed row has gone out, a later query error can no longer
-	// be reported as a clean error status.
-	var buf bytes.Buffer
-	writer := csv.NewWriter(&buf)
-
-	var exportErr error
-	switch entityType {
-	case "feedings":
-		exportErr = h.exportFeedings(writer, childID)
-	case "sleep":
-		exportErr = h.exportSleep(writer, childID)
-	case "changes":
-		exportErr = h.exportChanges(writer, childID)
-	case "tummy_times":
-		exportErr = h.exportTummyTimes(writer, childID)
-	case "temperature":
-		exportErr = h.exportTemperature(writer, childID)
-	case "weight":
-		exportErr = h.exportWeight(writer, childID)
-	case "height":
-		exportErr = h.exportHeight(writer, childID)
-	case "head_circumference":
-		exportErr = h.exportHeadCircumference(writer, childID)
-	case "pumping":
-		exportErr = h.exportPumping(writer, childID)
-	case "milk_waste":
-		exportErr = h.exportMilkWaste(writer, childID)
-	case "medications":
-		exportErr = h.exportMedications(writer, childID)
-	case "milestones":
-		exportErr = h.exportMilestones(writer, childID)
-	case "all":
-		exportErr = h.exportAll(writer, childID)
-	default:
-		pagination.WriteError(w, http.StatusBadRequest, "unknown export type")
-		return
-	}
-	if exportErr == nil {
-		writer.Flush()
-		exportErr = writer.Error()
-	}
-	if exportErr != nil {
-		slog.Error("export failed", "type", entityType, "child_id", childID, "error", exportErr)
-		pagination.WriteError(w, http.StatusInternalServerError, "export failed")
-		return
-	}
-
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	w.Write(buf.Bytes())
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	switch entityType {
+	case "feedings":
+		if err := h.exportFeedings(writer, childID); err != nil {
+			slog.Error("export feedings failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "sleep":
+		if err := h.exportSleep(writer, childID); err != nil {
+			slog.Error("export sleep failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "changes":
+		if err := h.exportChanges(writer, childID); err != nil {
+			slog.Error("export changes failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "tummy_times":
+		if err := h.exportTummyTimes(writer, childID); err != nil {
+			slog.Error("export tummy times failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "temperature":
+		if err := h.exportTemperature(writer, childID); err != nil {
+			slog.Error("export temperature failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "weight":
+		if err := h.exportWeight(writer, childID); err != nil {
+			slog.Error("export weight failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "height":
+		if err := h.exportHeight(writer, childID); err != nil {
+			slog.Error("export height failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "head_circumference":
+		if err := h.exportHeadCircumference(writer, childID); err != nil {
+			slog.Error("export head circumference failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "pumping":
+		if err := h.exportPumping(writer, childID); err != nil {
+			slog.Error("export pumping failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "milk_waste":
+		if err := h.exportMilkWaste(writer, childID); err != nil {
+			slog.Error("export milk waste failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "medications":
+		if err := h.exportMedications(writer, childID); err != nil {
+			slog.Error("export medications failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "milestones":
+		if err := h.exportMilestones(writer, childID); err != nil {
+			slog.Error("export milestones failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	case "all":
+		if err := h.exportAll(writer, childID); err != nil {
+			slog.Error("export all failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
+	default:
+		pagination.WriteError(w, http.StatusBadRequest, "unknown export type")
+	}
 }
 
 func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) error {
