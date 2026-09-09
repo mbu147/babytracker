@@ -66,6 +66,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22 h1:SE+aQ4DEqG53R
 github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22/go.mod h1:ES3ynECd7fYeJIL6+oax+uIEljmfps0S70BaQzbMd/o=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.62.5 h1:Z+/OLsb85Kpq7TVLCspskqePaf68Tdv6GfmJP4kH6i0=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.62.5/go.mod h1:TmxGowuBYwjmHFOsEDxaZdsQE62JJzOmtiWafTi/czg=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.62.6 h1:6b+KS0uVMMsCUKlW8OPNxmcEmoEUtqP1LfnzSzWmuQM=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.62.6/go.mod h1:+wmraHmxwqi7feUL/41uULJWl8V1HxtxzOJH6a4ZRg4=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1 h1:kU/eBN5+MWNo/LcbNa4hWDdN76hdcd7hocU5kvu7IsU=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1/go.mod h1:Fw9aqhJicIVee1VytBBjH+l+5ov6/PhbtIK/u3rt/ls=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.9 h1:QKZH0S178gCmFEgst8hN0mCX1KxLgHBKKY/CLqwP8lg=
@@ -123,6 +125,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/go-acme/lego/v4 v4.34.0 h1:oRsIuPJ4ORX7ufviXvelUpBSez2XxeKGwo5pNG9BVeY=
 github.com/go-acme/lego/v4 v4.34.0/go.mod h1:gsmdlx/ZS6OUeXbOj0U+VnCLLfEFj4WCYRkcGpZw+pc=
+github.com/go-acme/lego/v4 v4.35.2 h1:uVQg+KC/yj9R2g7Q9W5wDqhvQvxV5SMu5eqFVoN5xZU=
+github.com/go-acme/lego/v4 v4.35.2/go.mod h1:pX2jN5n8OphMGY1IaMjYm5DAEzguBaKRt8AvJAgJXpc=
 github.com/go-chi/chi/v5 v5.2.5 h1:Eg4myHZBjyvJmAFjFvWgrqDTXFyOzjj7YIm3L3mu6Ug=
 github.com/go-chi/chi/v5 v5.2.5/go.mod h1:X7Gx4mteadT3eDOMTsXzmI4/rwUpOwBHLpAfupzFJP0=
 github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
