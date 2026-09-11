@@ -24,17 +24,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-acme/lego/v4/certcrypto"
-	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/challenge"
-	"github.com/go-acme/lego/v4/challenge/dns01"
-	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
-	"github.com/go-acme/lego/v4/providers/dns/duckdns"
-	"github.com/go-acme/lego/v4/providers/dns/namecheap"
-	"github.com/go-acme/lego/v4/providers/dns/route53"
-	"github.com/go-acme/lego/v4/providers/dns/simply"
-	"github.com/go-acme/lego/v4/registration"
+	"github.com/go-acme/lego/v5/acme"
+	"github.com/go-acme/lego/v5/certcrypto"
+	"github.com/go-acme/lego/v5/certificate"
+	"github.com/go-acme/lego/v5/challenge"
+	"github.com/go-acme/lego/v5/lego"
+	"github.com/go-acme/lego/v5/providers/dns/cloudflare"
+	"github.com/go-acme/lego/v5/providers/dns/duckdns"
+	"github.com/go-acme/lego/v5/providers/dns/namecheap"
+	"github.com/go-acme/lego/v5/providers/dns/route53"
+	"github.com/go-acme/lego/v5/providers/dns/simply"
+	"github.com/go-acme/lego/v5/registration"
 )
 
 // GenerateSelfSignedCert creates an in-memory self-signed TLS certificate.
@@ -151,17 +151,16 @@ type Manager struct {
 	lastErr  string             // last error message (if status == "error")
 }
 
-
 // legoUser implements registration.User for the lego ACME client.
 type legoUser struct {
 	email string
-	key   crypto.PrivateKey
-	reg   *registration.Resource
+	key   *ecdsa.PrivateKey
+	reg   *acme.ExtendedAccount
 }
 
-func (u *legoUser) GetEmail() string                        { return u.email }
-func (u *legoUser) GetPrivateKey() crypto.PrivateKey        { return u.key }
-func (u *legoUser) GetRegistration() *registration.Resource { return u.reg }
+func (u *legoUser) GetEmail() string                       { return u.email }
+func (u *legoUser) GetPrivateKey() crypto.Signer           { return u.key }
+func (u *legoUser) GetRegistration() *acme.ExtendedAccount { return u.reg }
 
 // NewManager creates a new ACME certificate manager. Call Run() to start
 // the certificate lifecycle (obtain + renew).
@@ -318,7 +317,8 @@ func (m *Manager) obtain(cfg Config) error {
 		Domains: []string{cfg.Domain},
 		Bundle:  true,
 	}
-	cert, err := client.Certificate.Obtain(request)
+	request.KeyType = certcrypto.EC256
+	cert, err := client.Certificate.Obtain(context.Background(), request)
 	if err != nil {
 		return fmt.Errorf("obtain certificate: %w", err)
 	}
@@ -438,7 +438,6 @@ func (m *Manager) newClient(cfg Config) (*lego.Client, error) {
 	}
 
 	config := lego.NewConfig(user)
-	config.Certificate.KeyType = certcrypto.EC256
 
 	client, err := lego.NewClient(config)
 	if err != nil {
@@ -449,17 +448,14 @@ func (m *Manager) newClient(cfg Config) (*lego.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create DNS provider: %w", err)
 	}
-	// Use public DNS servers for propagation checks instead of the local
-	// resolver, which often caches negative responses and causes timeouts.
-	if err := client.Challenge.SetDNS01Provider(provider,
-		dns01.AddRecursiveNameservers([]string{"1.1.1.1:53", "8.8.8.8:53"}),
-	); err != nil {
+	// LEGO v5 uses the system DNS resolvers for propagation checks.
+	if err := client.Challenge.SetDNS01Provider(provider); err != nil {
 		return nil, fmt.Errorf("set DNS provider: %w", err)
 	}
 
 	// Register account if needed
 	if user.GetRegistration() == nil {
-		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+		reg, err := client.Registration.Register(context.Background(), registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {
 			return nil, fmt.Errorf("register account: %w", err)
 		}
@@ -615,7 +611,7 @@ func (m *Manager) loadOrCreateAccount(cfg Config) (*legoUser, error) {
 	// Try loading registration
 	regData, err := os.ReadFile(m.accountDataPath())
 	if err == nil {
-		var reg registration.Resource
+		var reg acme.ExtendedAccount
 		if json.Unmarshal(regData, &reg) == nil {
 			user.reg = &reg
 		}
