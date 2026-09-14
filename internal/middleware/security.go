@@ -38,7 +38,7 @@ func (w *noServerHeader) Flush() {
 var isHAMode = os.Getenv("SUPERVISOR_TOKEN") != "" || os.Getenv("HASSIO_TOKEN") != ""
 
 // Strict CSP for standalone/direct access.
-const strictCSP = "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+const strictCSP = "default-src 'self'; script-src 'self' blob: 'sha256-T9R7Pkn9Rw4q/GQ/fDgDoBTfFk4uR0RAekbYM6ygKKI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 
 // Relaxed CSP for HA ingress — no frame-ancestors (iframe), connect-src * (cross-origin proxy),
 // unsafe-inline in script-src (needed through proxy).
