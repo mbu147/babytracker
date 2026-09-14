@@ -100,6 +100,37 @@ describe("overlapHours", () => {
     expect(overlapHours({}, winStart, winEnd)).toBe(0);
     expect(overlapHours(null, winStart, winEnd)).toBe(0);
   });
+
+  // Entries saved from a paused timer keep the real end and carry the paused
+  // time in paused_seconds; the span alone would count the pause as sleep.
+  it("excludes paused_seconds for an entry inside the window", () => {
+    const entry = {
+      start: new Date(winStart + 2 * H).toISOString(),
+      end: new Date(winStart + 5 * H).toISOString(),
+      paused_seconds: 1800, // 30 min paused during a 3h span
+    };
+    expect(overlapHours(entry, winStart, winEnd)).toBeCloseTo(2.5, 5);
+  });
+
+  it("spreads paused time proportionally when the window clips the entry", () => {
+    // 4h span with 1h paused is 75% net; only the last 2h fall in the window.
+    const entry = {
+      start: new Date(winStart - 2 * H).toISOString(),
+      end: new Date(winStart + 2 * H).toISOString(),
+      paused_seconds: 3600,
+    };
+    expect(overlapHours(entry, winStart, winEnd)).toBeCloseTo(1.5, 5);
+  });
+
+  it("treats a missing or zero paused_seconds as no pause and clamps at zero", () => {
+    const entry = {
+      start: new Date(winStart + 2 * H).toISOString(),
+      end: new Date(winStart + 5 * H).toISOString(),
+    };
+    expect(overlapHours({ ...entry, paused_seconds: 0 }, winStart, winEnd)).toBeCloseTo(3, 5);
+    expect(overlapHours({ ...entry, paused_seconds: null }, winStart, winEnd)).toBeCloseTo(3, 5);
+    expect(overlapHours({ ...entry, paused_seconds: 4 * 3600 }, winStart, winEnd)).toBe(0);
+  });
 });
 
 describe("getAge", () => {

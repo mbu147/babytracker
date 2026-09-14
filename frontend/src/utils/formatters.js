@@ -153,13 +153,25 @@ export function parseDuration(durationStr) {
 // portion that's actually inside the window, instead of either its whole
 // duration (if start ∈ window) or nothing (if start ∉ window). Ongoing
 // entries with no end are treated as ending right now.
+//
+// An entry saved from a paused timer keeps its real end and carries the time
+// it spent paused in paused_seconds (the server's duration already excludes
+// it), so the raw span overstates the sleep. The individual pause intervals
+// aren't on the entry, so the paused time is taken as spread evenly across
+// the span and the overlap is scaled by the net/gross ratio: an entry wholly
+// inside the window contributes exactly its net duration.
 export function overlapHours(entry, windowStartMs, windowEndMs) {
   if (!entry?.start) return 0;
   const startMs = new Date(entry.start).getTime();
   const endMs = entry.end ? new Date(entry.end).getTime() : Date.now();
   const overlapStart = Math.max(startMs, windowStartMs);
   const overlapEnd = Math.min(endMs, windowEndMs);
-  return Math.max(0, (overlapEnd - overlapStart) / 3600000);
+  const overlapMs = Math.max(0, overlapEnd - overlapStart);
+  if (overlapMs === 0) return 0;
+  const spanMs = endMs - startMs;
+  const pausedMs = (Number(entry.paused_seconds) || 0) * 1000;
+  const ratio = spanMs > 0 && pausedMs > 0 ? Math.max(0, spanMs - pausedMs) / spanMs : 1;
+  return (overlapMs * ratio) / 3600000;
 }
 
 export function formatDuration(durationStr) {
