@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.15
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.67.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.109.1
-	github.com/go-acme/lego/v4 v4.35.2
+	github.com/go-acme/lego/v5 v5.4.1
 	github.com/go-acme/lego/v5 v5.4.1
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
