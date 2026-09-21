@@ -126,8 +126,6 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const handleBarTouchEnd = (event, type, seriesData, dataKey) => {
     const touch = event.changedTouches?.[0];
     if (!touch) return;
-    event.preventDefault();
-    event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     if (!rect.width) return;
     // The wrapper and the seven category bands share the same horizontal
