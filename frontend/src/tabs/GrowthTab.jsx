@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   LineChart,
   Line,
@@ -46,7 +46,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const { prefs, isFeatureEnabled } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const touchSelectionUntil = useRef(0);
   const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
+  const [sleepType, setSleepType] = useState("total");
   const birthDate = child?.birth_date;
   const sex = child?.sex;
   const canShowWHO = !!(birthDate && sex);
@@ -55,8 +57,14 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
   const feedingSeries = dailyAmountTotals(monthlyFeedings);
   const feedingCountSeries = dailyFeedingCountsByType(monthlyFeedings);
-  const sleepSeries = dailySleepTotals(monthlySleep);
-  const sleepCountSeries = dailyCounts(monthlySleep);
+  const totalSleepSeries = dailySleepTotals(monthlySleep);
+  const napSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => entry.nap));
+  const nightSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => !entry.nap));
+  const filteredSleep = sleepType === "total"
+    ? monthlySleep
+    : monthlySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
+  const sleepSeries = dailySleepTotals(filteredSleep);
+  const sleepCountSeries = dailyCounts(filteredSleep);
   const pumpingSeries = dailyAmountTotals(monthlyPumping);
   const pumpingCountSeries = dailyCounts(monthlyPumping);
 
@@ -110,10 +118,16 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const avgFeeding = feedingDays.length
     ? Math.round(feedingDays.reduce((s, d) => s + d.amount, 0) / feedingDays.length)
     : 0;
-  const sleepDays = sleepSeries.filter((d) => d.hours > 0);
-  const avgSleep = sleepDays.length
-    ? (sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length).toFixed(1)
-    : 0;
+  const sleepDays = totalSleepSeries.filter((d) => d.hours > 0);
+  const averageForSleepDays = (series) => {
+    const byDate = new Map(series.map((d) => [d.date, d.hours]));
+    return sleepDays.length
+      ? sleepDays.reduce((sum, day) => sum + (byDate.get(day.date) || 0), 0) / sleepDays.length
+      : 0;
+  };
+  const avgSleep = averageForSleepDays(totalSleepSeries);
+  const avgNapSleep = averageForSleepDays(napSleepSeries);
+  const avgNightSleep = averageForSleepDays(nightSleepSeries);
   // Both derived from the raw 30-day entries rather than the daily buckets:
   // spacing and session length are properties of individual feeds, and the
   // per-day totals have already thrown that away.
@@ -124,8 +138,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   // `activeLabel`, `activeTooltipIndex`/`activeIndex`, `activeDataKey` and
   // `activeCoordinate`, but not the payload. Resolve the clicked point by
   // indexing into the series array ourselves; the clicked row carries an
-  // `entry` pointer we need to open the edit form.
-  const handleChartClick = (data, type, seriesData, dataKey) => {
+  // `entry` pointer we need to open the edit form. Reading the label from the
+  // point also avoids stale activeLabel values on touch devices.
+  const selectChartPoint = (data, type, seriesData, dataKey) => {
     if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     if (idx == null || idx < 0 || idx >= seriesData.length) return;
@@ -133,7 +148,38 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
     if (!point) return;
     setSelectedBar({
       type,
-      label: data.activeLabel ?? point.timestamp ?? point.date,
+      label: point.date ?? point.timestamp,
+      value: point[dataKey],
+      entry: point.entry,
+    });
+  };
+
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    if (Date.now() < touchSelectionUntil.current) return;
+    selectChartPoint(data, type, seriesData, dataKey);
+  };
+
+  const handleGrowthTouchEnd = (event, type, seriesData, dataKey) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch || !seriesData?.length) return;
+    const tickNodes = [...event.currentTarget.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick")];
+    const tickPositions = tickNodes.map((tick) => {
+      const rect = tick.getBoundingClientRect();
+      return rect.left + rect.width / 2;
+    });
+    const first = tickPositions[0];
+    const last = tickPositions[tickPositions.length - 1];
+    const chartRect = event.currentTarget.getBoundingClientRect();
+    const start = Number.isFinite(first) ? first : chartRect.left;
+    const end = Number.isFinite(last) && last > start ? last : chartRect.right;
+    const fraction = Math.max(0, Math.min(1, (touch.clientX - start) / (end - start)));
+    const index = Math.round(fraction * (seriesData.length - 1));
+    const point = seriesData[index];
+    if (!point) return;
+    touchSelectionUntil.current = Date.now() + 750;
+    setSelectedBar({
+      type,
+      label: point.date ?? point.timestamp,
       value: point[dataKey],
       entry: point.entry,
     });
@@ -144,12 +190,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
     if (type === "feeding") {
       dayData = getEntriesForDate(monthlyFeedings, dateLabel, "start");
     } else if (type === "sleep") {
-      dayData = getEntriesForDate(monthlySleep, dateLabel, "start");
+      dayData = getEntriesForDate(filteredSleep, dateLabel, "start");
     } else if (type === "pumping") {
       dayData = getEntriesForDate(monthlyPumping, dateLabel, "start");
     }
     setSelectedBar(null);
     setDayModal({ day: dateLabel, type, data: dayData });
+  };
+
+  const handleSleepTypeChange = (type) => {
+    setSleepType(type);
+    setSelectedBar(null);
+    setDayModal(null);
   };
 
   return (
@@ -367,9 +419,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <StatCard
                 icon={<Icons.Moon />}
                 label={t("growth.avgSleep")}
-                value={avgSleep ? `${avgSleep}h` : "—"}
+                value={avgSleep ? `${avgSleep.toFixed(1)}h` : "—"}
                 color={colors.sleep}
-                sub={t("growth.perDay30d")}
+                sub={
+                  <>
+                    <div>{t("growth.perDay30d")}</div>
+                    <div>{t("sleep.nap")}: {formatHoursMinutes(avgNapSleep)}</div>
+                    <div>{t("sleep.night")}: {formatHoursMinutes(avgNightSleep)}</div>
+                  </>
+                }
               />
             </div>
           )}
@@ -389,7 +447,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           <SectionCard title={t("growth.dailyFeeding30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingSeries.some((d) => d.amount > 0) ? (
               <>
-                <div style={{ height: 200 }}>
+                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "feeding", feedingSeries, "amount")}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding", feedingSeries, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -461,10 +519,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Daily Sleep Totals */}
         {isFeatureEnabled("sleep") && <div className="fade-in fade-in-7">
-          <SectionCard title={t("growth.dailySleep30d")} icon={<Icons.Moon />} color={colors.sleep}>
+          <SectionCard
+            title={t("growth.dailySleep30d")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
+          >
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
-                <div style={{ height: 200 }}>
+                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "sleep", sleepSeries, "hours")}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep", sleepSeries, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -505,10 +568,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Daily Sleep Counts */}
         {isFeatureEnabled("sleep") && <div className="fade-in fade-in-7">
-          <SectionCard title={t("growth.dailySleepCount30d")} icon={<Icons.Moon />} color={colors.sleep}>
+          <SectionCard
+            title={t("growth.dailySleepCount30d")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
+          >
             {sleepCountSeries.some((d) => d.count > 0) ? (
               <>
-                <div style={{ height: 200 }}>
+                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "sleepCount", sleepCountSeries, "count")}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sleepCountSeries} onClick={(data) => handleChartClick(data, "sleepCount", sleepCountSeries, "count")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -543,7 +611,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("pumping") && pumpingSeries.some((d) => d.amount > 0) && <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumping30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
-              <div style={{ height: 200 }}>
+              <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "pumping", pumpingSeries, "amount")}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={pumpingSeries} onClick={(data) => handleChartClick(data, "pumping", pumpingSeries, "amount")}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -582,7 +650,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("pumping") && pumpingCountSeries.some((d) => d.count > 0) && <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumpingCount30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
-              <div style={{ height: 200 }}>
+              <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "pumpingCount", pumpingCountSeries, "count")}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={pumpingCountSeries} onClick={(data) => handleChartClick(data, "pumpingCount", pumpingCountSeries, "count")}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -807,6 +875,41 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         />
       )}
     </>
+  );
+}
+
+function SleepTypeToggle({ value, onChange }) {
+  const { t } = useI18n();
+  const options = [
+    ["total", t("growth.sleepTotal")],
+    ["nap", t("sleep.nap")],
+    ["night", t("sleep.night")],
+  ];
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("growth.sleepFilterLabel")}>
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: value === key ? "#6C5CE7" : "var(--card-bg)",
+            color: value === key ? "white" : "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
