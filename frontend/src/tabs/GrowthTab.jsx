@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   LineChart,
   Line,
@@ -46,6 +46,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const { prefs, isFeatureEnabled } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const touchSelectionUntil = useRef(0);
   const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
   const [sleepType, setSleepType] = useState("total");
   const birthDate = child?.birth_date;
@@ -139,7 +140,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   // indexing into the series array ourselves; the clicked row carries an
   // `entry` pointer we need to open the edit form. Reading the label from the
   // point also avoids stale activeLabel values on touch devices.
-  const handleChartClick = (data, type, seriesData, dataKey) => {
+  const selectChartPoint = (data, type, seriesData, dataKey) => {
     if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     if (idx == null || idx < 0 || idx >= seriesData.length) return;
@@ -151,6 +152,11 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       value: point[dataKey],
       entry: point.entry,
     });
+  };
+
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    if (Date.now() < touchSelectionUntil.current) return;
+    selectChartPoint(data, type, seriesData, dataKey);
   };
 
   const openDayModal = (dateLabel, type) => {
@@ -417,7 +423,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding", feedingSeries, "amount")}>
+                    <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding", feedingSeries, "amount")} onTouchEnd={(data) => handleChartTouchEnd(data, "feeding", feedingSeries, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -497,7 +503,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep", sleepSeries, "hours")}>
+                    <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep", sleepSeries, "hours")} onTouchEnd={(data) => handleChartTouchEnd(data, "sleep", sleepSeries, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -546,7 +552,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sleepCountSeries} onClick={(data) => handleChartClick(data, "sleepCount", sleepCountSeries, "count")}>
+                    <BarChart data={sleepCountSeries} onClick={(data) => handleChartClick(data, "sleepCount", sleepCountSeries, "count")} onTouchEnd={(data) => handleChartTouchEnd(data, "sleepCount", sleepCountSeries, "count")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -581,7 +587,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={pumpingSeries} onClick={(data) => handleChartClick(data, "pumping", pumpingSeries, "amount")}>
+                  <AreaChart data={pumpingSeries} onClick={(data) => handleChartClick(data, "pumping", pumpingSeries, "amount")} onTouchEnd={(data) => handleChartTouchEnd(data, "pumping", pumpingSeries, "amount")}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -620,7 +626,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={pumpingCountSeries} onClick={(data) => handleChartClick(data, "pumpingCount", pumpingCountSeries, "count")}>
+                  <BarChart data={pumpingCountSeries} onClick={(data) => handleChartClick(data, "pumpingCount", pumpingCountSeries, "count")} onTouchEnd={(data) => handleChartTouchEnd(data, "pumpingCount", pumpingCountSeries, "count")}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />

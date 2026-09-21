@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -48,6 +48,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const [expanded, setExpanded] = useState({});
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const touchSelectionUntil = useRef(0);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
@@ -103,7 +104,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   // into the chart's data array using `activeTooltipIndex` (or the legacy
   // `activeIndex` as a fallback). Read the label from that point rather than
   // `activeLabel`: on touch devices activeLabel can lag one tap behind.
-  const handleChartClick = (data, type, seriesData, dataKey) => {
+  const selectChartPoint = (data, type, seriesData, dataKey) => {
     if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     const point = idx != null ? seriesData[idx] : undefined;
@@ -112,6 +113,37 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
     const label = point.day ?? point.date;
     if (!label) return;
     setSelectedBar({ type, label, value });
+  };
+
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    // Mobile browsers dispatch a click after touchend. Recharts can still
+    // expose the previous active point for that synthetic click, so keep the
+    // touch selection and ignore the stale follow-up event.
+    if (Date.now() < touchSelectionUntil.current) return;
+    selectChartPoint(data, type, seriesData, dataKey);
+  };
+
+  const handleBarTouchEnd = (event, type, seriesData, dataKey) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    // The wrapper and the seven category bands share the same horizontal
+    // coordinate system. This also works when Recharts omits zero bars.
+    const relativeX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+    const index = Math.max(0, Math.min(seriesData.length - 1,
+      Math.floor(relativeX / (rect.width / seriesData.length))));
+    const point = seriesData[index];
+    if (!point) return;
+    touchSelectionUntil.current = Date.now() + 750;
+    setSelectedBar({ type, label: point.day ?? point.date, value: point[dataKey] });
+  };
+
+  const blockSyntheticChartClick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const openDayModal = (day, type) => {
@@ -243,7 +275,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {weeklyFeedings.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "feeding", weeklyFeedings, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={weeklyFeedings} barSize={18} onClick={(data) => handleChartClick(data, "feeding", weeklyFeedings, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -299,7 +331,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {sleepByDay.some((d) => d.hours > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "sleep", sleepByDay, "hours")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sleepByDay} barSize={18} onClick={(data) => handleChartClick(data, "sleep", sleepByDay, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -401,7 +433,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
           <SectionCard title={t("overview.tummyTime")} icon={<Icons.Sun />} color={colors.tummy}>
             {tummyByDay.some((d) => d.minutes > 0) ? (
               <>
-                <div style={{ height: 140 }}>
+                <div style={{ height: 140 }} onTouchEnd={(event) => handleBarTouchEnd(event, "tummy", tummyByDay, "minutes")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={tummyByDay} barSize={22} onClick={(data) => handleChartClick(data, "tummy", tummyByDay, "minutes")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -479,7 +511,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {pumpingByDay.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "pumping", pumpingByDay, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={pumpingByDay} barSize={18} onClick={(data) => handleChartClick(data, "pumping", pumpingByDay, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
