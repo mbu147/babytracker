@@ -98,6 +98,8 @@ export default {
   "growth.dailyFeedingCount30d": "Pasti giornalieri - Numero (30 gg)",
   "growth.dailySleep30d": "Sonno giornaliero - Ore (30 gg)",
   "growth.dailySleepCount30d": "Sonno giornaliero - Numero (30 gg)",
+  "growth.sleepFilterLabel": "Tipo di sonno",
+  "growth.sleepTotal": "Totale",
   "growth.dailyPumping30d": "Estrazioni giornaliere - Quantità (30 gg)",
   "growth.dailyPumpingCount30d": "Estrazioni giornaliere - Numero (30 gg)",
   "growth.session": "sessione",

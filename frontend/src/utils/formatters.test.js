@@ -418,7 +418,7 @@ describe("stashOutflow", () => {
 });
 
 describe("toFeedingTimeline", () => {
-  it("appends the session length to breastfeeds", () => {
+  it("shows the method followed by the session length for breastfeeds", () => {
     const [row] = toFeedingTimeline([
       { start: "2026-01-01T08:00:00Z", end: "2026-01-01T08:20:00Z", method: "left breast", duration: "00:20:00" },
     ]);
@@ -426,12 +426,12 @@ describe("toFeedingTimeline", () => {
     expect(row.label).toBe("Left Breast · 20m");
   });
 
-  it("leaves bottle feeds showing their amount alone", () => {
+  it("shows amount, method, and session length for bottle feeds", () => {
     const [row] = toFeedingTimeline(
       [{ start: "2026-01-01T08:00:00Z", method: "bottle", amount: 120, duration: "00:15:00" }],
       "mL",
     );
-    expect(row.label).toBe("120 mL Bottle");
+    expect(row.label).toBe("120 mL Bottle · 15m");
   });
 
   it("omits the duration when a breastfeed has none", () => {

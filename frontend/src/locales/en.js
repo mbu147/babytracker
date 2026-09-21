@@ -100,6 +100,8 @@ export default {
   "growth.dailyFeedingCount30d": "Daily Feedings - Count (30d)",
   "growth.dailySleep30d": "Daily Sleep - Hours (30d)",
   "growth.dailySleepCount30d": "Daily Sleep - Count (30d)",
+  "growth.sleepFilterLabel": "Sleep type",
+  "growth.sleepTotal": "Total",
   "growth.dailyPumping30d": "Daily Pumping - Amount (30d)",
   "growth.dailyPumpingCount30d": "Daily Pumping - Count (30d)",
   "growth.session": "session",

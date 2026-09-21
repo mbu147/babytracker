@@ -536,6 +536,8 @@ export default {
   "growth.dailyFeedingCount30d": "Alimentación diaria - Número (30d)",
   "growth.dailySleep30d": "Sueño diario - Horas (30d)",
   "growth.dailySleepCount30d": "Sueño diario - Número (30d)",
+  "growth.sleepFilterLabel": "Tipo de sueño",
+  "growth.sleepTotal": "Total",
   "growth.dailyPumping30d": "Extracción diaria - Cantidad (30d)",
   "growth.dailyPumpingCount30d": "Extracción diaria - Número (30d)",
   "growth.session": "sesión",

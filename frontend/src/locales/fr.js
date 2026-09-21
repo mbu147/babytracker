@@ -98,6 +98,8 @@ export default {
   "growth.dailyFeedingCount30d": "Repas quotidiens - Nombre (30 j)",
   "growth.dailySleep30d": "Sommeil quotidien - Heures (30 j)",
   "growth.dailySleepCount30d": "Sommeil quotidien - Nombre (30 j)",
+  "growth.sleepFilterLabel": "Type de sommeil",
+  "growth.sleepTotal": "Total",
   "growth.dailyPumping30d": "Tirages quotidiens - Quantité (30 j)",
   "growth.dailyPumpingCount30d": "Tirages quotidiens - Nombre (30 j)",
   "growth.session": "séance",

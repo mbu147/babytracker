@@ -98,6 +98,8 @@ export default {
   "growth.dailyFeedingCount30d": "Mahlzeiten täglich - Anzahl (30 T.)",
   "growth.dailySleep30d": "Schlaf täglich - Stunden (30 T.)",
   "growth.dailySleepCount30d": "Schlaf täglich - Anzahl (30 T.)",
+  "growth.sleepFilterLabel": "Schlafart",
+  "growth.sleepTotal": "Gesamt",
   "growth.dailyPumping30d": "Abpumpen täglich - Menge (30 T.)",
   "growth.dailyPumpingCount30d": "Abpumpen täglich - Anzahl (30 T.)",
   "growth.session": "Einheit",

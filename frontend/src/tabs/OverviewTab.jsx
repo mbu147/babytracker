@@ -101,14 +101,17 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   // Recharts v3 dropped `activePayload` from chart click events, so we can't
   // read the bar's value directly out of the event. Resolve it by indexing
   // into the chart's data array using `activeTooltipIndex` (or the legacy
-  // `activeIndex` as a fallback).
+  // `activeIndex` as a fallback). Read the label from that point rather than
+  // `activeLabel`: on touch devices activeLabel can lag one tap behind.
   const handleChartClick = (data, type, seriesData, dataKey) => {
-    if (!data || !data.activeLabel || !seriesData) return;
+    if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     const point = idx != null ? seriesData[idx] : undefined;
     const value = point ? point[dataKey] : undefined;
     if (value == null) return;
-    setSelectedBar({ type, label: data.activeLabel, value });
+    const label = point.day ?? point.date;
+    if (!label) return;
+    setSelectedBar({ type, label, value });
   };
 
   const openDayModal = (day, type) => {
@@ -275,7 +278,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
-                      label={`${formatSleepDuration(s.duration)}${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                      label={`${formatSleepDuration(s.duration)} · ${s.nap ? t("sleep.nap") : t("sleep.night")}`}
                       detail={t("general.timeRange", { from: s.start, to: s.end })}
                       color={colors.sleep}
                       isLast={i === arr.length - 1}
