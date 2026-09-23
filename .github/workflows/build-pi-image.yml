@@ -18,7 +18,7 @@ jobs:
   build:
     # Native arm64 runner — no QEMU emulation needed.
     # Free for public repos.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
 
     steps:
