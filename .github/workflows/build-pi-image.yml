@@ -80,6 +80,7 @@ jobs:
         env:
           BABYTRACKER_DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
+          export SOURCE_DATE_EPOCH="$(git -C "$GITHUB_WORKSPACE" show -s --format=%ct "$GITHUB_SHA")"
           cd /tmp/rpi-image-gen
           ./rpi-image-gen build \
             -S "$GITHUB_WORKSPACE/deploy/rpi-image-gen" \
