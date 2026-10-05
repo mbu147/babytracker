@@ -17,6 +17,7 @@ import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
 import MilkStock from "../components/MilkStock";
 import TagChips from "../components/TagChips";
+import SleepTypeToggle from "../components/SleepTypeToggle";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import {
@@ -48,26 +49,36 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const [expanded, setExpanded] = useState({});
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const [sleepType, setSleepType] = useState("total");
+  const [sleepPeriod, setSleepPeriod] = useState("today");
   const touchSelectionUntil = useRef(0);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
   const diaperTimeline = toDiaperTimeline(changes, t);
   const sleepBlocks = toSleepBlocks(sleepEntries);
+  const filteredSleepBlocks = sleepType === "total"
+    ? sleepBlocks
+    : sleepBlocks.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
   const weeklyFeedings = aggregateByDayOfWeek(weeklyFeedingsRaw, "amount");
-  const sleepByDay = aggregateSleepByDay(weeklySleep);
+  const filteredWeeklySleep = sleepType === "total"
+    ? weeklySleep
+    : weeklySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
+  const sleepByDay = aggregateSleepByDay(filteredWeeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
   const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume, t);
   const pumpingByDay = aggregateByDayOfWeek(weeklyPumping, "amount");
 
   const totalFeeding = feedings.reduce((s, f) => s + (f.amount || 0), 0);
   const totalPumping = pumpingSessions.reduce((s, p) => s + (p.amount || 0), 0);
-  // "Last 24 hours" sleep total: clip each entry to the rolling window so an
-  // overnight sleep that straddles the boundary contributes only the portion
-  // that actually falls inside the window (not its whole duration, and not
-  // zero). Ongoing sleeps are clipped to "now".
+  // Clip sleep entries to either the local calendar day or rolling 24-hour
+  // window. This preserves partial overnight sessions and ongoing sleeps.
   const sleepWindowEnd = Date.now();
-  const sleepWindowStart = sleepWindowEnd - 24 * 60 * 60 * 1000;
+  const todayStart = new Date(sleepWindowEnd);
+  todayStart.setHours(0, 0, 0, 0);
+  const sleepWindowStart = sleepPeriod === "24h"
+    ? sleepWindowEnd - 24 * 60 * 60 * 1000
+    : todayStart.getTime();
   const totalSleep = sleepEntries.reduce(
     (s, e) => s + overlapHours(e, sleepWindowStart, sleepWindowEnd),
     0
@@ -149,7 +160,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
     if (type === "feeding") {
       dayData = getEntriesForDay(weeklyFeedingsRaw, day, "start");
     } else if (type === "sleep") {
-      dayData = getEntriesForDay(weeklySleep, day, "start");
+      dayData = getEntriesForDay(filteredWeeklySleep, day, "start");
     } else if (type === "tummy") {
       dayData = getEntriesForDay(weeklyTummyTimes, day, "start");
     } else if (type === "pumping") {
@@ -183,7 +194,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Moon />}
               label={t("overview.sleep")}
               value={`${totalSleep.toFixed(1)}h`}
-              sub={t("overview.sleepLast24")}
+              sub={<SleepPeriodToggle value={sleepPeriod} onChange={setSleepPeriod} />}
               foot={lastSleep}
               color={colors.sleep}
               onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
@@ -301,10 +312,19 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
 
         {/* Sleep */}
         {isFeatureEnabled("sleep") && <div className="fade-in fade-in-4">
-          <SectionCard title={t("overview.sleepPattern")} icon={<Icons.Moon />} color={colors.sleep}>
-            {sleepBlocks.length > 0 ? (
+          <SectionCard
+            title={t("overview.sleepPattern")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={(type) => {
+              setSleepType(type);
+              setSelectedBar(null);
+              setDayModal(null);
+            }} />}
+          >
+            {filteredSleepBlocks.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {(expanded.sleep ? sleepBlocks : sleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
+                {(expanded.sleep ? filteredSleepBlocks : filteredSleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
@@ -316,9 +336,9 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                     />
                   </div>
                 ))}
-                {sleepBlocks.length > COLLAPSED_COUNT && (
+                {filteredSleepBlocks.length > COLLAPSED_COUNT && (
                   <button className="expand-toggle" onClick={() => toggle("sleep")}>
-                    {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: sleepBlocks.length - COLLAPSED_COUNT })}
+                    {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: filteredSleepBlocks.length - COLLAPSED_COUNT })}
                   </button>
                 )}
               </div>
@@ -621,5 +641,43 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         />
       )}
     </>
+  );
+}
+
+function SleepPeriodToggle({ value, onChange }) {
+  const { t } = useI18n();
+  const options = [
+    ["today", t("overview.sleepToday")],
+    ["24h", t("overview.sleep24h")],
+  ];
+
+  return (
+    <div
+      role="group"
+      aria-label={t("overview.sleepPeriodLabel")}
+      style={{ display: "flex", gap: 6, marginTop: -2 }}
+    >
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: value === key ? "#6C5CE7" : "var(--card-bg)",
+            color: value === key ? "white" : "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }

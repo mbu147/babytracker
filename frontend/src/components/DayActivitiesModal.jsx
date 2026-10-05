@@ -98,7 +98,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
             >
               <TimelineItem
                 time={`${s.start}–${s.end}`}
-                label={`${s.duration.toFixed(1)}h${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                label={`${s.duration.toFixed(1)}h · ${s.nap ? t("sleep.nap") : t("sleep.night")}`}
                 detail={t("general.timeRange", { from: s.start, to: s.end })}
                 color={colors.sleep}
                 isLast={i === arr.length - 1}

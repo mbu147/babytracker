@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LineChart,
   Line,
@@ -19,12 +19,15 @@ import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
 import WHOGrowthChart from "../components/WHOGrowthChart";
 import AddButton from "../components/AddButton";
+import SleepTypeToggle from "../components/SleepTypeToggle";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
 import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, avgFeedingGap, avgBreastDuration, formatHoursMinutes, FEEDING_COUNT_KEYS } from "../utils/formatters";
 import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
+import { getPointSelection } from "../utils/chartSelection";
+import ActiveChartPoint from "../components/ActiveChartPoint";
 
 // Labels come from the canonical FEEDING_TYPES i18n keys; a type without an
 // explicit color falls back to the "other" gray.
@@ -46,7 +49,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const { prefs, isFeatureEnabled } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
-  const touchSelectionUntil = useRef(0);
+  const activePoints = useRef({});
+  const clickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
   const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
   const [sleepType, setSleepType] = useState("total");
   const birthDate = child?.birth_date;
@@ -134,55 +139,17 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const feedingGap = avgFeedingGap(monthlyFeedings);
   const breastDuration = avgBreastDuration(monthlyFeedings);
 
-  // Recharts v3 removed `activePayload` from the chart click event — we have
-  // `activeLabel`, `activeTooltipIndex`/`activeIndex`, `activeDataKey` and
-  // `activeCoordinate`, but not the payload. Resolve the clicked point by
-  // indexing into the series array ourselves; the clicked row carries an
-  // `entry` pointer we need to open the edit form. Reading the label from the
-  // point also avoids stale activeLabel values on touch devices.
-  const selectChartPoint = (data, type, seriesData, dataKey) => {
-    if (!data || !seriesData) return;
-    const idx = data.activeTooltipIndex ?? data.activeIndex;
-    if (idx == null || idx < 0 || idx >= seriesData.length) return;
-    const point = seriesData[idx];
-    if (!point) return;
-    setSelectedBar({
-      type,
-      label: point.date ?? point.timestamp,
-      value: point[dataKey],
-      entry: point.entry,
-    });
-  };
-
-  const handleChartClick = (data, type, seriesData, dataKey) => {
-    if (Date.now() < touchSelectionUntil.current) return;
-    selectChartPoint(data, type, seriesData, dataKey);
-  };
-
-  const handleGrowthTouchEnd = (event, type, seriesData, dataKey) => {
-    const touch = event.changedTouches?.[0];
-    if (!touch || !seriesData?.length) return;
-    const tickNodes = [...event.currentTarget.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick")];
-    const tickPositions = tickNodes.map((tick) => {
-      const rect = tick.getBoundingClientRect();
-      return rect.left + rect.width / 2;
-    });
-    const first = tickPositions[0];
-    const last = tickPositions[tickPositions.length - 1];
-    const chartRect = event.currentTarget.getBoundingClientRect();
-    const start = Number.isFinite(first) ? first : chartRect.left;
-    const end = Number.isFinite(last) && last > start ? last : chartRect.right;
-    const fraction = Math.max(0, Math.min(1, (touch.clientX - start) / (end - start)));
-    const index = Math.round(fraction * (seriesData.length - 1));
-    const point = seriesData[index];
-    if (!point) return;
-    touchSelectionUntil.current = Date.now() + 750;
-    setSelectedBar({
-      type,
-      label: point.date ?? point.timestamp,
-      value: point[dataKey],
-      entry: point.entry,
-    });
+  // Recharts v3 has no `activePayload` in the click event, and on a tap the
+  // chart's active tooltip index is still the previous one when onClick runs
+  // (the tooltip updates afterwards, on the emulated mouse move). So the click
+  // only schedules a read of the point the tooltip shows once it has settled;
+  // <ActiveChartPoint> mirrors that point into `activePoints`.
+  const handleChartClick = (type, seriesData, dataKey) => {
+    clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      const selection = getPointSelection(activePoints.current[type], seriesData, dataKey);
+      if (selection) setSelectedBar({ type, ...selection });
+    }, 80);
   };
 
   const openDayModal = (dateLabel, type) => {
@@ -447,9 +414,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           <SectionCard title={t("growth.dailyFeeding30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingSeries.some((d) => d.amount > 0) ? (
               <>
-                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "feeding", feedingSeries, "amount")}>
+                <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding", feedingSeries, "amount")}>
+                    <AreaChart data={feedingSeries} onClick={() => handleChartClick("feeding", feedingSeries, "amount")}>
+                      <ActiveChartPoint store={activePoints} type="feeding" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -527,9 +495,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           >
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
-                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "sleep", sleepSeries, "hours")}>
+                <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep", sleepSeries, "hours")}>
+                    <AreaChart data={sleepSeries} onClick={() => handleChartClick("sleep", sleepSeries, "hours")}>
+                      <ActiveChartPoint store={activePoints} type="sleep" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -576,9 +545,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           >
             {sleepCountSeries.some((d) => d.count > 0) ? (
               <>
-                <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "sleepCount", sleepCountSeries, "count")}>
+                <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sleepCountSeries} onClick={(data) => handleChartClick(data, "sleepCount", sleepCountSeries, "count")}>
+                    <BarChart data={sleepCountSeries} onClick={() => handleChartClick("sleepCount", sleepCountSeries, "count")}>
+                      <ActiveChartPoint store={activePoints} type="sleepCount" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -611,9 +581,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("pumping") && pumpingSeries.some((d) => d.amount > 0) && <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumping30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
-              <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "pumping", pumpingSeries, "amount")}>
+              <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={pumpingSeries} onClick={(data) => handleChartClick(data, "pumping", pumpingSeries, "amount")}>
+                  <AreaChart data={pumpingSeries} onClick={() => handleChartClick("pumping", pumpingSeries, "amount")}>
+                    <ActiveChartPoint store={activePoints} type="pumping" />
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -650,9 +621,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("pumping") && pumpingCountSeries.some((d) => d.count > 0) && <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumpingCount30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
-              <div style={{ height: 200 }} onTouchEnd={(event) => handleGrowthTouchEnd(event, "pumpingCount", pumpingCountSeries, "count")}>
+              <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={pumpingCountSeries} onClick={(data) => handleChartClick(data, "pumpingCount", pumpingCountSeries, "count")}>
+                  <BarChart data={pumpingCountSeries} onClick={() => handleChartClick("pumpingCount", pumpingCountSeries, "count")}>
+                    <ActiveChartPoint store={activePoints} type="pumpingCount" />
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -689,7 +661,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={weightSeries} onClick={(data) => handleChartClick(data, "weight", weightSeries, "weight")}>
+                    <LineChart data={weightSeries} onClick={() => handleChartClick("weight", weightSeries, "weight")}>
+                      <ActiveChartPoint store={activePoints} type="weight" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -742,7 +715,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={heightSeries} onClick={(data) => handleChartClick(data, "height", heightSeries, "height")}>
+                    <LineChart data={heightSeries} onClick={() => handleChartClick("height", heightSeries, "height")}>
+                      <ActiveChartPoint store={activePoints} type="height" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -794,7 +768,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={headCircSeries} onClick={(data) => handleChartClick(data, "headcirc", headCircSeries, "head_circumference")}>
+                    <LineChart data={headCircSeries} onClick={() => handleChartClick("headcirc", headCircSeries, "head_circumference")}>
+                      <ActiveChartPoint store={activePoints} type="headcirc" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -875,41 +850,6 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         />
       )}
     </>
-  );
-}
-
-function SleepTypeToggle({ value, onChange }) {
-  const { t } = useI18n();
-  const options = [
-    ["total", t("growth.sleepTotal")],
-    ["nap", t("sleep.nap")],
-    ["night", t("sleep.night")],
-  ];
-
-  return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("growth.sleepFilterLabel")}>
-      {options.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          aria-pressed={value === key}
-          style={{
-            fontSize: 11,
-            fontWeight: 500,
-            padding: "4px 8px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: value === key ? "#6C5CE7" : "var(--card-bg)",
-            color: value === key ? "white" : "var(--text-muted)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
   );
 }
 
