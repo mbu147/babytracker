@@ -249,16 +249,16 @@ jobs:
             check "setup-ap.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-setup-ap.service
             check "avahi service exists" test -f /mnt/pi-rootfs/etc/avahi/services/babytracker.service
             check "hostapd.conf exists" test -f /mnt/pi-rootfs/etc/hostapd/hostapd.conf
-            check ".needs-setup flag exists" test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
+            check ".needs-setup flag exists" sudo test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
             check "common scripts installed" test -f /mnt/pi-rootfs/usr/lib/babytracker/common/setup-postgres.sh
 
             echo "--- Binary checks ---"
-            check "binary is ARM aarch64 ELF" file /mnt/pi-rootfs/usr/local/bin/babytracker '|' grep -q 'ELF 64-bit.*ARM aarch64'
+            check "binary is ARM aarch64 ELF" sh -c "file /mnt/pi-rootfs/usr/local/bin/babytracker | grep -q 'ELF 64-bit.*ARM aarch64'"
             check "binary is executable" test -x /mnt/pi-rootfs/usr/local/bin/babytracker
 
             echo "--- System user ---"
             check "babytracker user exists" grep -q '^babytracker:' /mnt/pi-rootfs/etc/passwd
-            check "pi user locked" grep -q '^pi:!' /mnt/pi-rootfs/etc/shadow || grep -q '^pi:\*' /mnt/pi-rootfs/etc/shadow
+            check "pi user locked" sudo grep -Eq '^pi:[!*]' /mnt/pi-rootfs/etc/shadow
 
             echo "--- Installed packages ---"
             check "postgresql installed" test -f /mnt/pi-rootfs/usr/bin/psql
@@ -268,8 +268,8 @@ jobs:
             check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
 
             echo "--- Permissions ---"
-            check "data dir owned by babytracker" stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker '|' grep -q 'babytracker:babytracker'
-            check "sudoers is 0440" stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker '|' grep -q '440'
+            check "data dir owned by babytracker" sh -c "sudo stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker | grep -q '^babytracker:babytracker\$'"
+            check "sudoers is 0440" sh -c "sudo stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker | grep -qx 440"
           fi
 
           echo ""
