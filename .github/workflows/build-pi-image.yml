@@ -99,6 +99,12 @@ jobs:
             -S "$GITHUB_WORKSPACE/deploy/rpi-image-gen" \
             -c "$GITHUB_WORKSPACE/deploy/rpi-image-gen/config/babytracker.yaml"
 
+      - name: Disk usage after failed build
+        if: failure()
+        run: |
+          df -h
+          sudo du -xh --max-depth=1 /tmp/rpi-image-gen/work 2>/dev/null | sort -h | tail -15
+
       - name: Inspect output
         run: |
           echo "=== All candidate files in work dir ==="
