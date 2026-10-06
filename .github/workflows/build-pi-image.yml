@@ -268,7 +268,10 @@ jobs:
             check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
 
             echo "--- Permissions ---"
-            check "data dir owned by babytracker" sh -c "sudo stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker | grep -q '^babytracker:babytracker\$'"
+            # Host has no babytracker user; compare numeric IDs from the image's own passwd/group.
+            BT_UID=$(awk -F: '$1=="babytracker"{print $3}' /mnt/pi-rootfs/etc/passwd)
+            BT_GID=$(awk -F: '$1=="babytracker"{print $3}' /mnt/pi-rootfs/etc/group)
+            check "data dir owned by babytracker" test "$(sudo stat -c '%u:%g' /mnt/pi-rootfs/var/lib/babytracker)" = "${BT_UID}:${BT_GID}"
             check "sudoers is 0440" sh -c "sudo stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker | grep -qx 440"
           fi
 
