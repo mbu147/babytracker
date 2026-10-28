@@ -17,6 +17,7 @@ export default function UserManagement({ children }) {
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showAddRole, setShowAddRole] = useState(false);
+  const [authSettings, setAuthSettings] = useState(null);
 
   const refresh = () => {
     // Fetch /users/me once per refresh too — the current user's id drives
@@ -33,23 +34,33 @@ export default function UserManagement({ children }) {
 
   useEffect(() => { refresh(); }, []);
 
+  useEffect(() => {
+    api.getAuthSettings().then(setAuthSettings).catch(() => {});
+  }, []);
+
+  const manualCreationAllowed = authSettings?.allow_manual_user_creation !== false;
+
   if (loading) return <div style={{ color: "var(--text-dim)", padding: 20, textAlign: "center" }}>{t("general.loading")}</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <AuthSettingsCard settings={authSettings} onChange={setAuthSettings} />
+
       {/* Users */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{t("users.title")}</div>
-          <button
-            onClick={() => setShowAddUser(!showAddUser)}
-            style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            {showAddUser ? t("users.cancel") : t("users.addUser")}
-          </button>
+          {manualCreationAllowed && (
+            <button
+              onClick={() => setShowAddUser(!showAddUser)}
+              style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {showAddUser ? t("users.cancel") : t("users.addUser")}
+            </button>
+          )}
         </div>
 
-        {showAddUser && <AddUserForm onDone={() => { setShowAddUser(false); refresh(); }} />}
+        {showAddUser && manualCreationAllowed && <AddUserForm onDone={() => { setShowAddUser(false); refresh(); }} />}
 
         {users.map((user) => (
           <UserCard
@@ -81,6 +92,63 @@ export default function UserManagement({ children }) {
           <RoleCard key={role.id} role={role} onRefresh={refresh} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function AuthSettingsCard({ settings, onChange }) {
+  const { t } = useI18n();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!settings) return null;
+
+  const update = async (patch) => {
+    setSaving(true);
+    setError("");
+    try {
+      onChange(await api.setAuthSettings(patch));
+    } catch (err) {
+      setError(err?.error || err?.message || t("users.failed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleStyle = {
+    display: "flex", alignItems: "center", gap: 8, fontSize: 13,
+    color: "var(--text-muted)", marginBottom: 8, cursor: saving ? "wait" : "pointer",
+  };
+
+  return (
+    <div style={{ background: "var(--bg)", borderRadius: 10, padding: 14, border: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>{t("users.accessTitle")}</div>
+      <label style={toggleStyle}>
+        <input
+          type="checkbox"
+          checked={settings.allow_self_registration}
+          disabled={saving}
+          onChange={(e) => update({ allow_self_registration: e.target.checked })}
+          style={{ accentColor: "#6C5CE7" }}
+        />
+        {t("users.allowSelfRegistration")}
+      </label>
+      <label style={toggleStyle}>
+        <input
+          type="checkbox"
+          checked={settings.allow_manual_user_creation}
+          disabled={saving}
+          onChange={(e) => update({ allow_manual_user_creation: e.target.checked })}
+          style={{ accentColor: "#6C5CE7" }}
+        />
+        {t("users.allowManualCreation")}
+      </label>
+      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+        {settings.oidc?.enabled
+          ? `${t("users.oidcConfigured")}: ${settings.oidc.name}`
+          : t("users.oidcNotConfigured")}
+      </div>
+      {error && <div style={{ color: "#e74c3c", fontSize: 12, marginTop: 8 }}>{error}</div>}
     </div>
   );
 }

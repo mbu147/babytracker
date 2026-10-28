@@ -4,13 +4,34 @@ import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
 
-export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
+const linkButtonStyle = {
+  background: "none", border: "none", color: "var(--text-muted)",
+  fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8,
+};
+
+export default function LoginScreen({
+  isSetup,
+  onAuthenticated,
+  onBack,
+  registrationEnabled = false,
+  oidc = null,
+  oidcError = null,
+}) {
   const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // The sign-in screen can switch to account creation when self-registration is on.
+  const [registerMode, setRegisterMode] = useState(false);
+  const isRegister = isSetup || registerMode;
+  const canToggleRegister = !isSetup && registrationEnabled;
+  const showOidc = !isSetup && !!oidc?.enabled;
+  const oidcMessage = oidcError
+    ? t(oidcError === "registration_disabled" ? "auth.oidcRegistrationDisabled" : "auth.oidcError")
+    : "";
+  const shownError = error || oidcMessage;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,7 +39,7 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
     setLoading(true);
 
     try {
-      if (isSetup) {
+      if (isRegister) {
         if (password !== confirmPassword) {
           setError("Passwords do not match");
           setLoading(false);
@@ -51,14 +72,14 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
           </div>
           <h1 className="login-title">BabyTracker</h1>
           <p className="login-subtitle">
-            {isSetup
+            {isRegister
               ? t("auth.createAccountHint")
               : t("auth.signInHint")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          {error && <div className="login-error">{error}</div>}
+          {shownError && <div className="login-error">{shownError}</div>}
 
           <div className="login-field">
             <label className="login-label">{t("auth.username")}</label>
@@ -83,11 +104,11 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              autoComplete={isSetup ? "new-password" : "current-password"}
+              autoComplete={isRegister ? "new-password" : "current-password"}
             />
           </div>
 
-          {isSetup && (
+          {isRegister && (
             <div className="login-field">
               <label className="login-label">{t("auth.confirmPassword")}</label>
               <input
@@ -110,10 +131,21 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
           >
             {loading
               ? t("auth.pleaseWait")
-              : isSetup
+              : isRegister
                 ? t("auth.createAccount")
                 : t("auth.signIn")}
           </button>
+
+          {canToggleRegister && (
+            <button
+              type="button"
+              onClick={() => { setRegisterMode(!registerMode); setError(""); }}
+              disabled={loading}
+              style={linkButtonStyle}
+            >
+              {registerMode ? t("auth.haveAccount") : t("auth.noAccount")}
+            </button>
+          )}
 
           {isSetup && onBack && (
             <button
@@ -130,6 +162,19 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
             </button>
           )}
         </form>
+
+        {showOidc && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 16px 16px" }}>
+            <div style={{ textAlign: "center", color: "var(--text-dim)", fontSize: 12 }}>{t("auth.oidcOr")}</div>
+            <a
+              href={api.oidcLoginUrl}
+              className="login-button"
+              style={{ background: colors.feeding, display: "block", textAlign: "center", textDecoration: "none", boxSizing: "border-box" }}
+            >
+              {t("auth.oidcSignIn")} {oidc.name}
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

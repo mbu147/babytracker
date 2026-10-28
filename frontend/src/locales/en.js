@@ -276,6 +276,12 @@ export default {
   "auth.password": "Password",
   "auth.confirmPassword": "Confirm Password",
   "auth.createAccountHint": "Create your account to get started",
+  "auth.noAccount": "No account yet? Create one",
+  "auth.haveAccount": "Already have an account? Sign in",
+  "auth.oidcOr": "or",
+  "auth.oidcSignIn": "Sign in with",
+  "auth.oidcError": "Single sign-on failed. Please try again.",
+  "auth.oidcRegistrationDisabled": "Your account has not been created. Ask an administrator to add you.",
   "auth.signInHint": "Sign in to continue",
   "auth.pleaseWait": "Please wait...",
 
@@ -657,6 +663,11 @@ export default {
 
   // User management
   "users.title": "Users",
+  "users.accessTitle": "Account access",
+  "users.allowSelfRegistration": "Allow self-registration",
+  "users.allowManualCreation": "Allow admins to create users",
+  "users.oidcConfigured": "Single sign-on active",
+  "users.oidcNotConfigured": "Single sign-on not configured (set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)",
   "users.addUser": "+ Add User",
   "users.cancel": "Cancel",
   "users.roles": "Roles",

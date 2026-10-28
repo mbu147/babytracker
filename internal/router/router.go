@@ -26,6 +26,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 	// Handlers
 	authH := handlers.NewAuthHandler(db, cfg)
+	oidcH := handlers.NewOIDCHandler(db, cfg, authH)
+	authSettingsH := handlers.NewAuthSettingsHandler(db, cfg)
 	childrenH := handlers.NewChildrenHandler(db)
 	feedingsH := handlers.NewFeedingsHandler(db)
 	sleepH := handlers.NewSleepHandler(db)
@@ -88,6 +90,9 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Use(middleware.RateLimit(60, time.Minute))
 		r.Post("/api/auth/register", authH.Register)
 		r.Post("/api/auth/login", authH.Login)
+		// OIDC is optional. These are browser redirects, not API calls.
+		r.Get("/api/auth/oidc/login", oidcH.Login)
+		r.Get("/api/auth/oidc/callback", oidcH.Callback)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(180, time.Minute))
@@ -313,6 +318,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			r.Get("/api/settings/tls", tlsH.Get)
 			r.Put("/api/settings/tls", tlsH.Set)
 			r.Post("/api/settings/tls/test", tlsH.Test)
+			r.Get("/api/settings/auth", authSettingsH.Get)
+			r.Put("/api/settings/auth", authSettingsH.Set)
 		})
 
 		// Non-admin user-management self-service endpoints

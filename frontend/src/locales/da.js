@@ -268,6 +268,12 @@ export default {
   "auth.password": "Adgangskode",
   "auth.confirmPassword": "Bekræft Adgangskode",
   "auth.createAccountHint": "Opret din konto for at komme i gang",
+  "auth.noAccount": "Har du ikke en konto? Opret en",
+  "auth.haveAccount": "Har du allerede en konto? Log ind",
+  "auth.oidcOr": "eller",
+  "auth.oidcSignIn": "Log ind med",
+  "auth.oidcError": "Single sign-on mislykkedes. Prøv igen.",
+  "auth.oidcRegistrationDisabled": "Din konto er ikke oprettet. Bed en administrator om at tilføje dig.",
   "auth.signInHint": "Log ind for at fortsætte",
   "auth.pleaseWait": "Vent venligst...",
 
@@ -628,6 +634,11 @@ export default {
 
   // User management
   "users.title": "Brugere",
+  "users.accessTitle": "Kontoadgang",
+  "users.allowSelfRegistration": "Tillad selvregistrering",
+  "users.allowManualCreation": "Tillad administratorer at oprette brugere",
+  "users.oidcConfigured": "Single sign-on aktiv",
+  "users.oidcNotConfigured": "Single sign-on er ikke konfigureret (sæt OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)",
   "users.addUser": "+ Tilføj Bruger",
   "users.cancel": "Annuller",
   "users.roles": "Roller",

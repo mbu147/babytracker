@@ -1,0 +1,29 @@
+# Dex configuration for local OIDC testing of babytracker.
+# See https://dexidp.io/docs/connectors/local/ for the reference.
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+enablePasswordDB: true
+
+staticClients:
+  - id: babytracker
+    name: Babytracker (dev)
+    secret: babytracker-dev-secret
+    redirectURIs:
+      - http://localhost:8080/api/auth/oidc/callback
+
+staticPasswords:
+  # Password is "password". This is the bcrypt hash from the Dex docs example.
+  # Dev only: generate your own hash for anything else.
+  - email: alice@example.com
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: alice
+    userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"

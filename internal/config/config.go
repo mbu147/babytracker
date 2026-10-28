@@ -32,6 +32,12 @@ type Config struct {
 	ACMEEmail       string // Email for ACME account registration
 	ACMEManageA     bool   // Create/update A record via DNS provider
 	ACMEIP          string // IP for the A record (empty = auto-detect)
+	OIDCIssuer      string // OIDC issuer URL, e.g. https://auth.example.com/realms/x
+	OIDCClientID    string // OIDC client ID
+	OIDCSecret      string // OIDC client secret (optional for public clients)
+	OIDCRedirectURL string // Callback URL registered with the provider
+	OIDCProvName    string // Button label shown on the login screen
+	OIDCScopes      string // Space-separated scopes (default "openid profile email")
 
 	// setupMode tracks whether .needs-setup is active. Atomic so the
 	// RequireSetupMode middleware (reader on every request) and the
@@ -48,7 +54,6 @@ type Config struct {
 	// from blocking on long-lived connections).
 	DisplaySubs any // *handlers.DisplayHandler, closer via CloseAll()
 
-
 	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
 	// destination's path may resolve into. Defaults to {DataDir}/backups plus
 	// any colon-separated value of BACKUP_LOCAL_ROOTS. Prevents an admin from
@@ -64,6 +69,12 @@ type Config struct {
 
 func (c *Config) IsProxyMode() bool {
 	return c.ProxyURL != ""
+}
+
+// OIDCEnabled reports whether OIDC sign-in is configured. Password login is
+// always available regardless.
+func (c *Config) OIDCEnabled() bool {
+	return c.OIDCIssuer != "" && c.OIDCClientID != "" && c.OIDCRedirectURL != ""
 }
 
 // IsSetupMode reports whether the first-boot setup portal is active.
@@ -93,24 +104,30 @@ func New() *Config {
 	warnIfInsecureDatabaseURL(databaseURL)
 
 	c := &Config{
-		Port:            envOrDefault("PORT", "443"),
-		DataDir:         dataDir,
-		DatabaseURL:     databaseURL,
-		JWTSecret:       jwtSecret,
-		UnitSystem:      envOrDefault("UNIT_SYSTEM", "metric"),
-		RefreshInterval: 30,
-		DemoMode:        os.Getenv("DEMO_MODE") == "true",
-		ProxyURL:        os.Getenv("BABYTRACKER_PROXY_URL"),
-		MediaPath:       os.Getenv("MEDIA_PATH"),
-		TLSCert:         os.Getenv("TLS_CERT"),
-		TLSKey:          os.Getenv("TLS_KEY"),
-		TLSDomain:       os.Getenv("TLS_DOMAIN"),
-		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
-		TLSEnabled:      os.Getenv("TLS_ENABLED") != "false", // default true
-		ACMEDNSProvider: os.Getenv("ACME_DNS_PROVIDER"),
-		ACMEEmail:       os.Getenv("ACME_EMAIL"),
-		ACMEManageA:     os.Getenv("ACME_MANAGE_A") != "false", // default true
-		ACMEIP:          os.Getenv("ACME_IP"),
+		Port:             envOrDefault("PORT", "443"),
+		DataDir:          dataDir,
+		DatabaseURL:      databaseURL,
+		JWTSecret:        jwtSecret,
+		UnitSystem:       envOrDefault("UNIT_SYSTEM", "metric"),
+		RefreshInterval:  30,
+		DemoMode:         os.Getenv("DEMO_MODE") == "true",
+		ProxyURL:         os.Getenv("BABYTRACKER_PROXY_URL"),
+		MediaPath:        os.Getenv("MEDIA_PATH"),
+		TLSCert:          os.Getenv("TLS_CERT"),
+		TLSKey:           os.Getenv("TLS_KEY"),
+		TLSDomain:        os.Getenv("TLS_DOMAIN"),
+		CertsDir:         envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
+		TLSEnabled:       os.Getenv("TLS_ENABLED") != "false", // default true
+		ACMEDNSProvider:  os.Getenv("ACME_DNS_PROVIDER"),
+		ACMEEmail:        os.Getenv("ACME_EMAIL"),
+		ACMEManageA:      os.Getenv("ACME_MANAGE_A") != "false", // default true
+		ACMEIP:           os.Getenv("ACME_IP"),
+		OIDCIssuer:       strings.TrimRight(os.Getenv("OIDC_ISSUER"), "/"),
+		OIDCClientID:     os.Getenv("OIDC_CLIENT_ID"),
+		OIDCSecret:       os.Getenv("OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
+		OIDCProvName:     envOrDefault("OIDC_PROVIDER_NAME", "Single sign-on"),
+		OIDCScopes:       envOrDefault("OIDC_SCOPES", "openid profile email"),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}
 	c.setupMode.Store(fileExists(filepath.Join(dataDir, ".needs-setup")))

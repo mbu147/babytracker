@@ -136,6 +136,13 @@ function getTimerLabel(name, tr) {
 export default function App() {
   const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup-choice, setup, login, authenticated
+  // Registration/OIDC availability from /api/auth/status.
+  const [authInfo, setAuthInfo] = useState({});
+  // The OIDC callback redirects to /?oidc_error=<code> on failure.
+  const [oidcError] = useState(() => new URLSearchParams(window.location.search).get("oidc_error"));
+  useEffect(() => {
+    if (oidcError) window.history.replaceState(null, "", window.location.pathname);
+  }, [oidcError]);
   // setupIntent carries the user's first-boot choice past the register step so
   // OnboardingScreen can skip its own "what next?" picker. null after login or
   // on a pre-existing install.
@@ -173,6 +180,7 @@ export default function App() {
         }
 
         const status = await api.getAuthStatus().catch(() => ({ setup_required: false }));
+        setAuthInfo(status);
         if (status.setup_required) {
           setAuthState("setup-choice");
           return;
@@ -227,6 +235,9 @@ export default function App() {
         isSetup={authState === "setup"}
         onAuthenticated={() => setAuthState("authenticated")}
         onBack={authState === "setup" ? () => setAuthState("setup-choice") : null}
+        registrationEnabled={!!authInfo.registration_enabled}
+        oidc={authInfo.oidc || null}
+        oidcError={oidcError}
       />
     );
   }

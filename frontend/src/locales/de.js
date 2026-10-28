@@ -274,6 +274,12 @@ export default {
   "auth.password": "Passwort",
   "auth.confirmPassword": "Passwort bestätigen",
   "auth.createAccountHint": "Erstelle dein Konto, um loszulegen",
+  "auth.noAccount": "Noch kein Konto? Jetzt registrieren",
+  "auth.haveAccount": "Schon ein Konto? Anmelden",
+  "auth.oidcOr": "oder",
+  "auth.oidcSignIn": "Anmelden mit",
+  "auth.oidcError": "Single Sign-on fehlgeschlagen. Bitte erneut versuchen.",
+  "auth.oidcRegistrationDisabled": "Dein Konto wurde nicht angelegt. Bitte einen Administrator, dich hinzuzufügen.",
   "auth.signInHint": "Melde dich an, um fortzufahren",
   "auth.pleaseWait": "Bitte warten...",
 
@@ -655,6 +661,11 @@ export default {
 
   // User management
   "users.title": "Benutzer",
+  "users.accessTitle": "Kontozugang",
+  "users.allowSelfRegistration": "Selbstregistrierung erlauben",
+  "users.allowManualCreation": "Administratoren das Anlegen von Benutzern erlauben",
+  "users.oidcConfigured": "Single Sign-on aktiv",
+  "users.oidcNotConfigured": "Single Sign-on nicht konfiguriert (OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL setzen)",
   "users.addUser": "+ Benutzer hinzufügen",
   "users.cancel": "Abbrechen",
   "users.roles": "Rollen",

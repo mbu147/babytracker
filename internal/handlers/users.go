@@ -70,6 +70,11 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !models.GetBoolSetting(h.db, models.SettingAllowManualUserCreation, true) {
+		pagination.WriteError(w, http.StatusForbidden, "manual user creation is disabled")
+		return
+	}
+
 	var req createUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")

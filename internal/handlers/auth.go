@@ -102,8 +102,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "database error")
 		return
 	}
-	if count > 0 {
-		pagination.WriteError(w, http.StatusForbidden, "registration is disabled after initial setup")
+	// The first account is always created here (and becomes admin). Later
+	// accounts need the self-registration toggle.
+	if count > 0 && !models.GetBoolSetting(h.db, models.SettingAllowSelfRegistration, false) {
+		pagination.WriteError(w, http.StatusForbidden, "registration is disabled")
 		return
 	}
 
@@ -128,7 +130,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := models.CreateUser(h.db, req.Username, hash, true) // First user is always admin
+	// Only the first account becomes admin; self-registered accounts are regular users.
+	user, err := models.CreateUser(h.db, req.Username, hash, count == 0)
 	if err != nil {
 		pagination.WriteError(w, http.StatusConflict, "username already exists")
 		return
@@ -243,8 +246,14 @@ func (h *AuthHandler) Status(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "database error")
 		return
 	}
+	selfReg := models.GetBoolSetting(h.db, models.SettingAllowSelfRegistration, false)
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
-		"setup_required": count == 0,
+		"setup_required":       count == 0,
+		"registration_enabled": count == 0 || selfReg,
+		"oidc": map[string]any{
+			"enabled": h.cfg.OIDCEnabled(),
+			"name":    h.cfg.OIDCProvName,
+		},
 	})
 }
 
@@ -255,20 +264,11 @@ func (h *AuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, user *
 		return
 	}
 
-	refreshToken, err := crypto.GenerateRefreshToken()
+	refreshToken, err := h.createSession(w, r, user)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to generate refresh token")
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-
-	tokenHash := crypto.HashRefreshToken(refreshToken)
-	expiresAt := time.Now().Add(crypto.RefreshTokenExpiry)
-	if err := models.CreateRefreshToken(h.db, user.ID, tokenHash, expiresAt); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to store refresh token")
-		return
-	}
-
-	http.SetCookie(w, h.refreshCookie(r, refreshToken, int(crypto.RefreshTokenExpiry.Seconds())))
 
 	resp := authResponse{
 		AccessToken: accessToken,
@@ -290,6 +290,25 @@ func (h *AuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, user *
 	}
 
 	pagination.WriteJSON(w, http.StatusOK, resp)
+}
+
+// createSession stores a new refresh token for user and sets the refresh
+// cookie. It returns the raw token so issueTokens can include it under ingress.
+// The OIDC callback uses it too, so both sign-in paths end in the same session.
+func (h *AuthHandler) createSession(w http.ResponseWriter, r *http.Request, user *models.User) (string, error) {
+	refreshToken, err := crypto.GenerateRefreshToken()
+	if err != nil {
+		return "", err
+	}
+
+	tokenHash := crypto.HashRefreshToken(refreshToken)
+	expiresAt := time.Now().Add(crypto.RefreshTokenExpiry)
+	if err := models.CreateRefreshToken(h.db, user.ID, tokenHash, expiresAt); err != nil {
+		return "", err
+	}
+
+	http.SetCookie(w, h.refreshCookie(r, refreshToken, int(crypto.RefreshTokenExpiry.Seconds())))
+	return refreshToken, nil
 }
 
 // refreshCookie builds the refresh token cookie with Secure set only over HTTPS.

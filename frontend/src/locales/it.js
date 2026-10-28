@@ -274,6 +274,12 @@ export default {
   "auth.password": "Password",
   "auth.confirmPassword": "Conferma la password",
   "auth.createAccountHint": "Crea il tuo account per iniziare",
+  "auth.noAccount": "Non hai un account? Registrati",
+  "auth.haveAccount": "Hai già un account? Accedi",
+  "auth.oidcOr": "oppure",
+  "auth.oidcSignIn": "Accedi con",
+  "auth.oidcError": "Accesso unico non riuscito. Riprova.",
+  "auth.oidcRegistrationDisabled": "Il tuo account non è stato creato. Chiedi a un amministratore di aggiungerti.",
   "auth.signInHint": "Accedi per continuare",
   "auth.pleaseWait": "Attendere...",
 
@@ -655,6 +661,11 @@ export default {
 
   // User management
   "users.title": "Utenti",
+  "users.accessTitle": "Accesso agli account",
+  "users.allowSelfRegistration": "Consenti la registrazione autonoma",
+  "users.allowManualCreation": "Consenti agli amministratori di creare utenti",
+  "users.oidcConfigured": "Accesso unico attivo",
+  "users.oidcNotConfigured": "Accesso unico non configurato (imposta OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)",
   "users.addUser": "+ Aggiungi utente",
   "users.cancel": "Annulla",
   "users.roles": "Ruoli",

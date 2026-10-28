@@ -698,6 +698,11 @@ export const api = {
 
   // Auth
   getAuthStatus: () => jsonRequest(`${AUTH_BASE}/status`),
+  // Browser navigation target for the OIDC flow (not a fetch).
+  oidcLoginUrl: `${AUTH_BASE}/oidc/login`,
+  getAuthSettings: () => request("settings/auth"),
+  setAuthSettings: (settings) =>
+    request("settings/auth", { method: "PUT", body: JSON.stringify(settings) }),
   setupRestore: (file, passphrase, wipePhotos) => {
     const formData = new FormData();
     formData.append("backup", file);
