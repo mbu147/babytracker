@@ -89,7 +89,7 @@ postgresql:
   enabled: true
   image:
     repository: postgres
-    tag: "18-alpine"
+    tag: "19-alpine"
     pullPolicy: IfNotPresent
   database: babytracker
   username: babytracker
