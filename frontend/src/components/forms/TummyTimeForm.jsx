@@ -6,13 +6,15 @@ import PhotoPicker from "../PhotoPicker";
 import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, timerEndToUTC } from "../../utils/datetime";
 
 export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
   const isEdit = !!entry;
-  const now = new Date();
+  // Fixed at first render: when a timer was just stopped, this is the stop time.
+  const [now] = useState(() => new Date());
   const tenMinsAgo = new Date(now.getTime() - 10 * 60 * 1000);
+  const currentLocalDatetime = toLocalDatetime(now);
   const currentLocalDatetime = toLocalDatetime(now);
   const [milestone, setMilestone] = useState(entry?.milestone || "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(tenMinsAgo));
@@ -72,6 +74,24 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
     <Modal title={isEdit ? t("tummy.edit") : t("tummy.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         {(isEdit || !timerId) && (
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
+        )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? currentLocalDatetime : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
           <FormField label={t("general.start")}>
             <FormInput
               type="datetime-local"

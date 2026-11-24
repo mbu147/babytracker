@@ -1,9 +1,10 @@
+import { getDisplayLocale } from "../utils/formatters";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton, trapTab } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
-import NaraImport from "./NaraImport";
+import DataImport from "./DataImport";
 import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
 import {
   usePreferences,
@@ -35,7 +36,7 @@ function formatBackupDate(raw) {
   if (!raw) return "";
   const d = new Date(raw);
   if (isNaN(d.getTime())) return raw;
-  return d.toLocaleString();
+  return d.toLocaleString(getDisplayLocale());
 }
 
 export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
@@ -43,9 +44,16 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
-  const [showNaraImport, setShowNaraImport] = useState(false);
+  // Which app's import dialog is open: null, "nara" or "nighp".
+  const [importSource, setImportSource] = useState(null);
   const naraOpener = useRef(null);
+  const nighpOpener = useRef(null);
   const { prefs, setFeatureEnabled, setViewEnabled, setFormDefault, setPref } = usePreferences();
+  // OIDC / password sign-in availability, for the Account section.
+  const [authConfig, setAuthConfig] = useState(null);
+  useEffect(() => {
+    api.getConfig().then(setAuthConfig).catch(() => {});
+  }, []);
   const [deviceName, setDeviceName] = useState(
     () => localStorage.getItem("babytracker_device_name") || ""
   );
@@ -62,7 +70,7 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
 
   return (
     <div className="settings-overlay">
-      <div className="settings-page" inert={showNaraImport || undefined}>
+      <div className="settings-page" inert={!!importSource || undefined}>
         {/* Header */}
         <div className="settings-header">
           <h2 className="settings-title">{t("settings.title")}</h2>
@@ -532,7 +540,11 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.account")}</h3>
 
-                {onLogout && <ChangePasswordSection />}
+                {onLogout && authConfig?.oidc_enabled && (
+                  <OIDCLinkSection providerName={authConfig.oidc_provider_name} />
+                )}
+
+                {onLogout && authConfig?.password_login !== false && <ChangePasswordSection />}
 
                 {onLogout && (
                   <button onClick={onLogout} className="settings-signout">
@@ -574,15 +586,20 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
                   </div>
                 </div>
 
-                {/* Import (admin only) — Nara exports one baby per file, so
+                {/* Import (admin only) — these exports cover one baby each, so
                     a second baby can't come in through first-run onboarding */}
                 {isAdmin && (
                   <div className="settings-card" style={{ marginBottom: 16 }}>
                     <h4 className="settings-card-title">{t("settings.import")}</h4>
                     <p className="settings-hint" style={{ marginBottom: 12 }}>{t("settings.importNaraDesc")}</p>
-                    <button ref={naraOpener} className="settings-export-main" onClick={() => setShowNaraImport(true)}>
+                    <button ref={naraOpener} className="settings-export-main" onClick={() => setImportSource("nara")}>
                       <Icons.Download />
                       {t("onboarding.importNara")}
+                    </button>
+                    <p className="settings-hint" style={{ margin: "16px 0 12px" }}>{t("settings.importNighpDesc")}</p>
+                    <button ref={nighpOpener} className="settings-export-main" onClick={() => setImportSource("nighp")}>
+                      <Icons.Download />
+                      {t("onboarding.importNighp")}
                     </button>
                   </div>
                 )}
@@ -633,32 +650,36 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
           </div>
         </div>
       </div>
-      {showNaraImport && (
-        <NaraImportDialog label={t("onboarding.importNara")} opener={naraOpener}>
+      {importSource && (
+        <DataImportDialog
+          label={t(importSource === "nighp" ? "onboarding.importNighp" : "onboarding.importNara")}
+          opener={importSource === "nighp" ? nighpOpener : naraOpener}
+        >
           {/* No unit choice here: stored amounts carry no unit, and the
               other babies' amounts are labelled with this device's setting,
               so a new baby is saved in those units too. */}
-          <NaraImport
+          <DataImport
+            source={importSource}
             unitSystem={units}
-            doneLabel={t("nara.done")}
-            onBack={() => setShowNaraImport(false)}
+            doneLabel={t("import.done")}
+            onBack={() => setImportSource(null)}
             onDone={async () => {
-              setShowNaraImport(false);
+              setImportSource(null);
               await onRefetch?.();
             }}
           />
-        </NaraImportDialog>
+        </DataImportDialog>
       )}
     </div>
   );
 }
 
-// NaraImportDialog shows the Nara import over Settings as a modal dialog:
+// DataImportDialog shows an import over Settings as a modal dialog:
 // focus moves into it on open and back to the button that opened it on
 // close, and Tab can't leave it for the Settings page (also inert) or the
 // dashboard behind both. It closes through the import's own Back and Done
 // buttons, not Escape, so an import can't be dismissed mid-way.
-export function NaraImportDialog({ label, opener, children }) {
+export function DataImportDialog({ label, opener, children }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
@@ -730,7 +751,7 @@ function TLSVerificationField({ url, mode, setMode, pinnedMeta, setPinnedCertPEM
       const msg = t("settings.tlsConfirmTrust")
         .replace("{subject}", info.subject)
         .replace("{issuer}", info.issuer)
-        .replace("{notAfter}", new Date(info.not_after).toLocaleDateString())
+        .replace("{notAfter}", new Date(info.not_after).toLocaleDateString(getDisplayLocale()))
         .replace("{fingerprint}", info.sha256_fingerprint);
       if (confirm(msg)) {
         setPinnedCertPEM(info.pem);
@@ -778,7 +799,7 @@ function TLSVerificationField({ url, mode, setMode, pinnedMeta, setPinnedCertPEM
                   <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}>
                     <div style={{ fontWeight: 500 }}>{pinnedMeta.subject}</div>
                     <div style={{ color: "var(--text-dim)", marginTop: 2 }}>
-                      {t("settings.tlsExpires")}: {pinnedMeta.not_after ? new Date(pinnedMeta.not_after).toLocaleDateString() : "—"}
+                      {t("settings.tlsExpires")}: {pinnedMeta.not_after ? new Date(pinnedMeta.not_after).toLocaleDateString(getDisplayLocale()) : "—"}
                     </div>
                     <div style={{ fontFamily: "var(--mono, monospace)", fontSize: 10, color: "var(--text-dim)", marginTop: 2, wordBreak: "break-all" }}>
                       {pinnedMeta.fingerprint}
@@ -2251,7 +2272,7 @@ function TLSSection() {
         {certInfo ? (
           <div style={{ fontSize: 13 }}>
             <div style={{ color: "#00b894", marginBottom: 4 }}>
-              Valid until {new Date(certInfo.expires).toLocaleDateString()}
+              Valid until {new Date(certInfo.expires).toLocaleDateString(getDisplayLocale())}
               {certInfo.issuer ? ` — issued by ${certInfo.issuer}` : " — self-signed"}
             </div>
             {certInfo.issuer && (
@@ -2276,6 +2297,61 @@ function TLSSection() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// OIDCLinkSection links the signed-in account to an account at the OIDC
+// provider. Linking is only possible from inside the account — the server
+// never matches provider accounts to local ones by name or email.
+function OIDCLinkSection({ providerName }) {
+  const { t } = useI18n();
+  const provider = providerName || "SSO";
+  const [linked, setLinked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getCurrentUserAccess()
+      .then((res) => setLinked(!!res.oidc_linked))
+      .catch(() => setLinked(false));
+  }, []);
+
+  const handleLink = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await api.linkOIDC();
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.error || err.message || t("auth.oidcErrorFailed"));
+      setBusy(false);
+    }
+  };
+
+  if (linked === null) return null;
+
+  return (
+    <div className="settings-card" style={{ marginTop: 16 }}>
+      <h4 className="settings-card-title">{t("settings.oidcTitle")}</h4>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 12px" }}>
+        {linked
+          ? t("settings.oidcLinked", { provider })
+          : t("settings.oidcNotLinked", { provider })}
+      </p>
+      {error && (
+        <div style={{
+          padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 13,
+          background: "#e74c3c18", color: "#e74c3c",
+        }}>
+          {error}
+        </div>
+      )}
+      {!linked && (
+        <button type="button" className="settings-export-main" onClick={handleLink} disabled={busy}>
+          {busy ? t("auth.pleaseWait") : t("settings.oidcLink", { provider })}
+        </button>
+      )}
     </div>
   );
 }

@@ -26,6 +26,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 	// Handlers
 	authH := handlers.NewAuthHandler(db, cfg)
+	oidcH := handlers.NewOIDCHandler(db, cfg, authH)
 	childrenH := handlers.NewChildrenHandler(db)
 	feedingsH := handlers.NewFeedingsHandler(db)
 	sleepH := handlers.NewSleepHandler(db)
@@ -60,6 +61,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
 	naraImportH := handlers.NewNaraImportHandler(db, cfg)
+	nighpImportH := handlers.NewNighpImportHandler(db, cfg)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 
@@ -88,6 +90,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Use(middleware.RateLimit(60, time.Minute))
 		r.Post("/api/auth/register", authH.Register)
 		r.Post("/api/auth/login", authH.Login)
+
+		// OIDC sign-in: browser navigations, not fetches — see oidc.go.
+		r.Get("/api/auth/oidc/login", oidcH.Login)
+		r.Get("/api/auth/oidc/callback", oidcH.Callback)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(180, time.Minute))
@@ -317,6 +323,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 		// Non-admin user-management self-service endpoints
 		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
+		r.Post("/api/auth/oidc/link", oidcH.Link)
 		r.Put("/api/users/me/password", usersH.ChangeOwnPassword)
 
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)
@@ -352,6 +359,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			// than behind the 1 MB JSON body limit.
 			r.Post("/api/import/nara/preview", naraImportH.Preview)
 			r.Post("/api/import/nara", naraImportH.Import)
+
+			// Nighp Baby Tracker import: a zip or CSV upload, as above.
+			r.Post("/api/import/nighp-babytracker/preview", nighpImportH.Preview)
+			r.Post("/api/import/nighp-babytracker", nighpImportH.Import)
 		})
 	})
 

@@ -8,7 +8,7 @@ import { colors } from "../../utils/colors";
 import { methodsForType } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, timerEndToUTC } from "../../utils/datetime";
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -103,6 +103,15 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
               if (!methodsForType(nextType).some((m) => m.value === method)) setMethod(methodsForType(nextType)[0].value);
             }}
           />
+          <FormSelect
+            options={TYPES}
+            value={type}
+            onChange={(e) => {
+              const nextType = e.target.value;
+              setType(nextType);
+              if (!methodsForType(nextType).some((m) => m.value === method)) setMethod(methodsForType(nextType)[0].value);
+            }}
+          />
         </FormField>
         <FormField label={t("feeding.method")}>
           <FormSelect options={METHODS} value={method} onChange={(e) => setMethod(e.target.value)} />
@@ -111,6 +120,24 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
           <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>
         {(isEdit || !timerId) && (
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
+        )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? toLocalDatetime(now) : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
           <FormField label={t("general.start")}>
             <FormInput
               type="datetime-local"

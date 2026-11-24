@@ -18,6 +18,7 @@ import DayActivitiesModal from "../components/DayActivitiesModal";
 import MilkStock from "../components/MilkStock";
 import TagChips from "../components/TagChips";
 import SleepTypeToggle from "../components/SleepTypeToggle";
+import SleepTypeToggle from "../components/SleepTypeToggle";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import {
@@ -28,6 +29,7 @@ import {
   aggregateByDayOfWeek,
   aggregateSleepByDay,
   aggregateTummyByDay,
+  aggregateDiapersByDay,
   aggregateDiapersByDay,
   getEntriesForDay,
   overlapHours,
@@ -54,12 +56,21 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const [sleepPeriod, setSleepPeriod] = useState("today");
   const [diaperType, setDiaperType] = useState("total");
   const touchSelectionUntil = useRef(0);
+  const [sleepType, setSleepType] = useState("total");
+  const [sleepPeriod, setSleepPeriod] = useState("today");
+  const [diaperType, setDiaperType] = useState("total");
+  const touchSelectionUntil = useRef(0);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
   const diaperMatches = (c) => diaperType === "total" || (diaperType === "wet" ? c.wet : c.solid);
   const diaperTimeline = toDiaperTimeline(changes.filter(diaperMatches), t);
+  const diaperMatches = (c) => diaperType === "total" || (diaperType === "wet" ? c.wet : c.solid);
+  const diaperTimeline = toDiaperTimeline(changes.filter(diaperMatches), t);
   const sleepBlocks = toSleepBlocks(sleepEntries);
+  const filteredSleepBlocks = sleepType === "total"
+    ? sleepBlocks
+    : sleepBlocks.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
   const filteredSleepBlocks = sleepType === "total"
     ? sleepBlocks
     : sleepBlocks.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
@@ -68,7 +79,13 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
     ? weeklySleep
     : weeklySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
   const sleepByDay = aggregateSleepByDay(filteredWeeklySleep);
+  const filteredWeeklySleep = sleepType === "total"
+    ? weeklySleep
+    : weeklySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
+  const sleepByDay = aggregateSleepByDay(filteredWeeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
+  const filteredWeeklyChanges = weeklyChanges.filter(diaperMatches);
+  const diapersByDay = aggregateDiapersByDay(filteredWeeklyChanges);
   const filteredWeeklyChanges = weeklyChanges.filter(diaperMatches);
   const diapersByDay = aggregateDiapersByDay(filteredWeeklyChanges);
   const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume, t);
@@ -78,7 +95,14 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const totalPumping = pumpingSessions.reduce((s, p) => s + (p.amount || 0), 0);
   // Clip sleep entries to either the local calendar day or rolling 24-hour
   // window. This preserves partial overnight sessions and ongoing sleeps.
+  // Clip sleep entries to either the local calendar day or rolling 24-hour
+  // window. This preserves partial overnight sessions and ongoing sleeps.
   const sleepWindowEnd = Date.now();
+  const todayStart = new Date(sleepWindowEnd);
+  todayStart.setHours(0, 0, 0, 0);
+  const sleepWindowStart = sleepPeriod === "24h"
+    ? sleepWindowEnd - 24 * 60 * 60 * 1000
+    : todayStart.getTime();
   const todayStart = new Date(sleepWindowEnd);
   todayStart.setHours(0, 0, 0, 0);
   const sleepWindowStart = sleepPeriod === "24h"
@@ -122,10 +146,46 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   // `activeLabel`: on touch devices activeLabel can lag one tap behind.
   const selectChartPoint = (data, type, seriesData, dataKey) => {
     if (!data || !seriesData) return;
+  // `activeIndex` as a fallback). Read the label from that point rather than
+  // `activeLabel`: on touch devices activeLabel can lag one tap behind.
+  const selectChartPoint = (data, type, seriesData, dataKey) => {
+    if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     const point = idx != null ? seriesData[idx] : undefined;
     const value = point ? point[dataKey] : undefined;
     if (value == null) return;
+    const label = point.day ?? point.date;
+    if (!label) return;
+    setSelectedBar({ type, label, value });
+  };
+
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    // Mobile browsers dispatch a click after touchend. Recharts can still
+    // expose the previous active point for that synthetic click, so keep the
+    // touch selection and ignore the stale follow-up event.
+    if (Date.now() < touchSelectionUntil.current) return;
+    selectChartPoint(data, type, seriesData, dataKey);
+  };
+
+  const handleBarTouchEnd = (event, type, seriesData, dataKey) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    // The wrapper and the seven category bands share the same horizontal
+    // coordinate system. This also works when Recharts omits zero bars.
+    const relativeX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+    const index = Math.max(0, Math.min(seriesData.length - 1,
+      Math.floor(relativeX / (rect.width / seriesData.length))));
+    const point = seriesData[index];
+    if (!point) return;
+    touchSelectionUntil.current = Date.now() + 750;
+    setSelectedBar({ type, label: point.day ?? point.date, value: point[dataKey] });
+  };
+
+  const blockSyntheticChartClick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     const label = point.day ?? point.date;
     if (!label) return;
     setSelectedBar({ type, label, value });
@@ -166,10 +226,13 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       dayData = getEntriesForDay(weeklyFeedingsRaw, day, "start");
     } else if (type === "sleep") {
       dayData = getEntriesForDay(filteredWeeklySleep, day, "start");
+      dayData = getEntriesForDay(filteredWeeklySleep, day, "start");
     } else if (type === "tummy") {
       dayData = getEntriesForDay(weeklyTummyTimes, day, "start");
     } else if (type === "pumping") {
       dayData = getEntriesForDay(weeklyPumping, day, "start");
+    } else if (type === "diaper") {
+      dayData = getEntriesForDay(filteredWeeklyChanges, day, "time");
     } else if (type === "diaper") {
       dayData = getEntriesForDay(filteredWeeklyChanges, day, "time");
     }
@@ -189,6 +252,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalFeeding > 0 ? `${Math.round(totalFeeding)} ${units.volume}` : `${feedings.length}`}
               sub={t(feedings.length === 1 ? "overview.feedingsToday_one" : "overview.feedingsToday_other", { count: feedings.length })}
               foot={lastFeeding}
+              keepFoot
               color={colors.feeding}
               onAdd={canWrite("feeding") ? () => onEditEntry?.("feeding") : undefined}
               addLabel={t("action.feeding")}
@@ -203,6 +267,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${totalSleep.toFixed(1)}h`}
               sub={<SleepPeriodToggle value={sleepPeriod} onChange={setSleepPeriod} />}
               foot={lastSleep}
+              keepFoot
               color={colors.sleep}
               onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
               addLabel={t("action.sleep")}
@@ -217,6 +282,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalDiapers}
               sub={t("overview.diaperBreakdown", { wet: wetCount, solid: solidCount, both: bothCount })}
               foot={lastDiaper}
+              keepFoot
               color={colors.diaper}
               onAdd={canWrite("diaper") ? () => onEditEntry?.("diaper") : undefined}
               addLabel={t("action.diaper")}
@@ -231,6 +297,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${Math.round(avgTummy)}m`}
               sub={t(tummyTimes.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: tummyTimes.length })}
               foot={lastTummy}
+              keepFoot
               color={colors.tummy}
               onAdd={canWrite("tummy") ? () => onEditEntry?.("tummy") : undefined}
               addLabel={t("action.tummy")}
@@ -245,6 +312,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalPumping > 0 ? `${Math.round(totalPumping)} ${units.volume}` : `${pumpingSessions.length}`}
               sub={t(pumpingSessions.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: pumpingSessions.length })}
               foot={lastPumping}
+              keepFoot
               color={colors.pumping}
               onAdd={canWrite("pumping") ? () => onEditEntry?.("pumping") : undefined}
               addLabel={t("action.pumping")}
@@ -263,7 +331,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       >
         {/* Feeding Timeline */}
         {isFeatureEnabled("feeding") && <div className="fade-in fade-in-3">
-          <SectionCard title={t("overview.recentFeedings")} icon={<Icons.Bottle />} color={colors.feeding}>
+          <SectionCard fill title={t("overview.recentFeedings")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingTimeline.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.feedings ? feedingTimeline : feedingTimeline.slice(0, COLLAPSED_COUNT)).map((f, i, arr) => (
@@ -332,9 +400,11 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             {filteredSleepBlocks.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.sleep ? filteredSleepBlocks : filteredSleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
+                {(expanded.sleep ? filteredSleepBlocks : filteredSleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
+                      label={`${formatSleepDuration(s.duration)} · ${s.nap ? t("sleep.nap") : t("sleep.night")}`}
                       label={`${formatSleepDuration(s.duration)} · ${s.nap ? t("sleep.nap") : t("sleep.night")}`}
                       detail={t("general.timeRange", { from: s.start, to: s.end })}
                       color={colors.sleep}
@@ -344,7 +414,9 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   </div>
                 ))}
                 {filteredSleepBlocks.length > COLLAPSED_COUNT && (
+                {filteredSleepBlocks.length > COLLAPSED_COUNT && (
                   <button className="expand-toggle" onClick={() => toggle("sleep")}>
+                    {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: filteredSleepBlocks.length - COLLAPSED_COUNT })}
                     {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: filteredSleepBlocks.length - COLLAPSED_COUNT })}
                   </button>
                 )}
@@ -493,6 +565,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             {tummyByDay.some((d) => d.minutes > 0) ? (
               <>
                 <div style={{ height: 140 }} onTouchEnd={(event) => handleBarTouchEnd(event, "tummy", tummyByDay, "minutes")} onClick={blockSyntheticChartClick}>
+                <div style={{ height: 140 }} onTouchEnd={(event) => handleBarTouchEnd(event, "tummy", tummyByDay, "minutes")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={tummyByDay} barSize={22} onClick={(data) => handleChartClick(data, "tummy", tummyByDay, "minutes")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -542,7 +615,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         {/* Pumping — data-gated like temperature/medications so families who
             don't pump (but leave the feature on) don't carry an empty card */}
         {isFeatureEnabled("pumping") && (pumpingTimeline.length > 0 || pumpingByDay.some((d) => d.amount > 0)) && <div className="fade-in fade-in-6">
-          <SectionCard title={t("overview.recentPumping")} icon={<Icons.Bottle />} color={colors.pumping}>
+          <SectionCard fill title={t("overview.recentPumping")} icon={<Icons.Bottle />} color={colors.pumping}>
             {pumpingTimeline.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.pumping ? pumpingTimeline : pumpingTimeline.slice(0, COLLAPSED_COUNT)).map((p, i, arr) => (
@@ -618,10 +691,10 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   <div key={temp.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? `${colors.temp}08` : "transparent" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("temp", temp)}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: colors.temp }}>
-                        {temp.temperature.toFixed(1)}
+                        {formatNumber(temp.temperature)}
                       </span>
                       <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                        {new Date(temp.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(temp.time).toLocaleString(getDisplayLocale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
                       <TagChips tags={tagMaps.temperature?.[temp.id]} size="sm" />
                     </div>

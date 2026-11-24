@@ -11,12 +11,17 @@ import { toLocalDatetime, localInputToUTC, isNapTime } from "../../utils/datetim
 export default function SleepForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
   const isEdit = !!entry;
-  const now = new Date();
+  // Fixed at first render: when a timer was just stopped, this is the stop time.
+  const [now] = useState(() => new Date());
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const currentLocalDatetime = toLocalDatetime(now);
   const initialStart = entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo);
   const [start, setStart] = useState(initialStart);
+  const currentLocalDatetime = toLocalDatetime(now);
+  const initialStart = entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo);
+  const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
+  const [nap, setNap] = useState(entry?.nap ?? isNapTime(currentLocalDatetime));
   const [nap, setNap] = useState(entry?.nap ?? isNapTime(currentLocalDatetime));
   const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [notes, setNotes] = useState(entry?.notes || "");
@@ -77,6 +82,25 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   return (
     <Modal title={isEdit ? t("sleep.edit") : t("sleep.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
+        {(isEdit || !timerId) && (
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
+        )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? currentLocalDatetime : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         {(isEdit || !timerId) && (
           <FormField label={t("general.start")}>
             <FormInput

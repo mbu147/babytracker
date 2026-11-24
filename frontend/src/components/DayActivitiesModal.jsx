@@ -1,3 +1,4 @@
+import { formatNumber } from "../utils/formatters";
 import Modal from "./Modal";
 import TimelineItem from "./TimelineItem";
 import DiaperBadge from "./DiaperBadge";
@@ -25,6 +26,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
       case "tummy": return <Icons.Sun />;
       case "pumping": return <Icons.Bottle />;
       case "diaper": return <Icons.Droplet />;
+      case "diaper": return <Icons.Droplet />;
       default: return <Icons.Activity />;
     }
   };
@@ -45,6 +47,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
       sleep: "dayModal.sleepSessions",
       tummy: "dayModal.tummySessions",
       pumping: "dayModal.pumpingSessions",
+      diaper: "dayModal.diapers",
       diaper: "dayModal.diapers",
     }[type] || "dayModal.activities";
     return `${t(key)} - ${day}`;
@@ -129,6 +132,31 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
                 label={p.label}
                 detail={p.detail}
                 color={colors.pumping}
+                isLast={i === arr.length - 1}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (type === "diaper") {
+      const timeline = toDiaperTimeline(data, t);
+      return (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {timeline.map((d, i, arr) => (
+            <div
+              key={i}
+              className="entry-clickable"
+              onClick={() => {
+                onEditEntry?.("diaper", d.entry);
+                onClose();
+              }}
+            >
+              <TimelineItem
+                time={d.time}
+                label={<DiaperBadge type={d.type} />}
+                color={colors.diaper}
                 isLast={i === arr.length - 1}
               />
             </div>

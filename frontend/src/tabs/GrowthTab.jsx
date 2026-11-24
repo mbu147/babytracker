@@ -20,12 +20,15 @@ import DayActivitiesModal from "../components/DayActivitiesModal";
 import WHOGrowthChart from "../components/WHOGrowthChart";
 import AddButton from "../components/AddButton";
 import SleepTypeToggle from "../components/SleepTypeToggle";
+import SleepTypeToggle from "../components/SleepTypeToggle";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
 import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, avgFeedingGap, avgBreastDuration, formatHoursMinutes, FEEDING_COUNT_KEYS } from "../utils/formatters";
 import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
+import { getPointSelection } from "../utils/chartSelection";
+import ActiveChartPoint from "../components/ActiveChartPoint";
 import { getPointSelection } from "../utils/chartSelection";
 import ActiveChartPoint from "../components/ActiveChartPoint";
 
@@ -52,7 +55,11 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const activePoints = useRef({});
   const clickTimer = useRef(null);
   useEffect(() => () => clearTimeout(clickTimer.current), []);
+  const activePoints = useRef({});
+  const clickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
   const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
+  const [sleepType, setSleepType] = useState("total");
   const [sleepType, setSleepType] = useState("total");
   const birthDate = child?.birth_date;
   const sex = child?.sex;
@@ -62,6 +69,14 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
   const feedingSeries = dailyAmountTotals(monthlyFeedings);
   const feedingCountSeries = dailyFeedingCountsByType(monthlyFeedings);
+  const totalSleepSeries = dailySleepTotals(monthlySleep);
+  const napSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => entry.nap));
+  const nightSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => !entry.nap));
+  const filteredSleep = sleepType === "total"
+    ? monthlySleep
+    : monthlySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
+  const sleepSeries = dailySleepTotals(filteredSleep);
+  const sleepCountSeries = dailyCounts(filteredSleep);
   const totalSleepSeries = dailySleepTotals(monthlySleep);
   const napSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => entry.nap));
   const nightSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => !entry.nap));
@@ -133,12 +148,33 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const avgSleep = averageForSleepDays(totalSleepSeries);
   const avgNapSleep = averageForSleepDays(napSleepSeries);
   const avgNightSleep = averageForSleepDays(nightSleepSeries);
+  const sleepDays = totalSleepSeries.filter((d) => d.hours > 0);
+  const averageForSleepDays = (series) => {
+    const byDate = new Map(series.map((d) => [d.date, d.hours]));
+    return sleepDays.length
+      ? sleepDays.reduce((sum, day) => sum + (byDate.get(day.date) || 0), 0) / sleepDays.length
+      : 0;
+  };
+  const avgSleep = averageForSleepDays(totalSleepSeries);
+  const avgNapSleep = averageForSleepDays(napSleepSeries);
+  const avgNightSleep = averageForSleepDays(nightSleepSeries);
   // Both derived from the raw 30-day entries rather than the daily buckets:
   // spacing and session length are properties of individual feeds, and the
   // per-day totals have already thrown that away.
   const feedingGap = avgFeedingGap(monthlyFeedings);
   const breastDuration = avgBreastDuration(monthlyFeedings);
 
+  // Recharts v3 has no `activePayload` in the click event, and on a tap the
+  // chart's active tooltip index is still the previous one when onClick runs
+  // (the tooltip updates afterwards, on the emulated mouse move). So the click
+  // only schedules a read of the point the tooltip shows once it has settled;
+  // <ActiveChartPoint> mirrors that point into `activePoints`.
+  const handleChartClick = (type, seriesData, dataKey) => {
+    clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      const selection = getPointSelection(activePoints.current[type], seriesData, dataKey);
+      if (selection) setSelectedBar({ type, ...selection });
+    }, 80);
   // Recharts v3 has no `activePayload` in the click event, and on a tap the
   // chart's active tooltip index is still the previous one when onClick runs
   // (the tooltip updates afterwards, on the emulated mouse move). So the click
@@ -158,11 +194,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       dayData = getEntriesForDate(monthlyFeedings, dateLabel, "start");
     } else if (type === "sleep") {
       dayData = getEntriesForDate(filteredSleep, dateLabel, "start");
+      dayData = getEntriesForDate(filteredSleep, dateLabel, "start");
     } else if (type === "pumping") {
       dayData = getEntriesForDate(monthlyPumping, dateLabel, "start");
     }
     setSelectedBar(null);
     setDayModal({ day: dateLabel, type, data: dayData });
+  };
+
+  const handleSleepTypeChange = (type) => {
+    setSleepType(type);
+    setSelectedBar(null);
+    setDayModal(null);
   };
 
   const handleSleepTypeChange = (type) => {
@@ -223,7 +266,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestWeight && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestWeight.date).toLocaleDateString()}
+                {new Date(latestWeight.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -270,7 +313,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestHeight && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestHeight.date).toLocaleDateString()}
+                {new Date(latestHeight.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -304,7 +347,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestHeadCirc && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestHeadCirc.date).toLocaleDateString()}
+                {new Date(latestHeadCirc.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -341,7 +384,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
               {bmi
                 ? bmi.source === "manual"
-                  ? `${t("growth.doctorValue")} · ${new Date(bmi.date).toLocaleDateString()}`
+                  ? `${t("growth.doctorValue")} · ${new Date(bmi.date).toLocaleDateString(getDisplayLocale())}`
                   : t("growth.calculatedFrom", { weight: `${latestWeight.weight} ${units.weight}`, height: `${latestHeight.height} ${units.length}` })
                 : t("general.noData")}
             </div>
@@ -387,7 +430,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 icon={<Icons.Moon />}
                 label={t("growth.avgSleep")}
                 value={avgSleep ? `${avgSleep.toFixed(1)}h` : "—"}
+                value={avgSleep ? `${avgSleep.toFixed(1)}h` : "—"}
                 color={colors.sleep}
+                sub={
+                  <>
+                    <div>{t("growth.perDay30d")}</div>
+                    <div>{t("sleep.nap")}: {formatHoursMinutes(avgNapSleep)}</div>
+                    <div>{t("sleep.night")}: {formatHoursMinutes(avgNightSleep)}</div>
+                  </>
+                }
                 sub={
                   <>
                     <div>{t("growth.perDay30d")}</div>
@@ -416,6 +467,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={feedingSeries} onClick={() => handleChartClick("feeding", feedingSeries, "amount")}>
+                      <ActiveChartPoint store={activePoints} type="feeding" />
                     <AreaChart data={feedingSeries} onClick={() => handleChartClick("feeding", feedingSeries, "amount")}>
                       <ActiveChartPoint store={activePoints} type="feeding" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -493,10 +546,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             color={colors.sleep}
             action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
           >
+          <SectionCard
+            title={t("growth.dailySleep30d")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
+          >
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={sleepSeries} onClick={() => handleChartClick("sleep", sleepSeries, "hours")}>
+                      <ActiveChartPoint store={activePoints} type="sleep" />
                     <AreaChart data={sleepSeries} onClick={() => handleChartClick("sleep", sleepSeries, "hours")}>
                       <ActiveChartPoint store={activePoints} type="sleep" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -543,10 +604,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             color={colors.sleep}
             action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
           >
+          <SectionCard
+            title={t("growth.dailySleepCount30d")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={handleSleepTypeChange} />}
+          >
             {sleepCountSeries.some((d) => d.count > 0) ? (
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sleepCountSeries} onClick={() => handleChartClick("sleepCount", sleepCountSeries, "count")}>
+                      <ActiveChartPoint store={activePoints} type="sleepCount" />
                     <BarChart data={sleepCountSeries} onClick={() => handleChartClick("sleepCount", sleepCountSeries, "count")}>
                       <ActiveChartPoint store={activePoints} type="sleepCount" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -583,6 +652,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={pumpingSeries} onClick={() => handleChartClick("pumping", pumpingSeries, "amount")}>
+                    <ActiveChartPoint store={activePoints} type="pumping" />
                   <AreaChart data={pumpingSeries} onClick={() => handleChartClick("pumping", pumpingSeries, "amount")}>
                     <ActiveChartPoint store={activePoints} type="pumping" />
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -625,6 +696,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={pumpingCountSeries} onClick={() => handleChartClick("pumpingCount", pumpingCountSeries, "count")}>
                     <ActiveChartPoint store={activePoints} type="pumpingCount" />
+                  <BarChart data={pumpingCountSeries} onClick={() => handleChartClick("pumpingCount", pumpingCountSeries, "count")}>
+                    <ActiveChartPoint store={activePoints} type="pumpingCount" />
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -661,6 +734,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={weightSeries} onClick={() => handleChartClick("weight", weightSeries, "weight")}>
+                      <ActiveChartPoint store={activePoints} type="weight" />
                     <LineChart data={weightSeries} onClick={() => handleChartClick("weight", weightSeries, "weight")}>
                       <ActiveChartPoint store={activePoints} type="weight" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -717,6 +792,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={heightSeries} onClick={() => handleChartClick("height", heightSeries, "height")}>
                       <ActiveChartPoint store={activePoints} type="height" />
+                    <LineChart data={heightSeries} onClick={() => handleChartClick("height", heightSeries, "height")}>
+                      <ActiveChartPoint store={activePoints} type="height" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -768,6 +845,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={headCircSeries} onClick={() => handleChartClick("headcirc", headCircSeries, "head_circumference")}>
+                      <ActiveChartPoint store={activePoints} type="headcirc" />
                     <LineChart data={headCircSeries} onClick={() => handleChartClick("headcirc", headCircSeries, "head_circumference")}>
                       <ActiveChartPoint store={activePoints} type="headcirc" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
